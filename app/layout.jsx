@@ -1,6 +1,9 @@
 import { Montserrat } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AppSidebar } from "@/components/AppSidebar";
+import { SidebarProvider } from "@/components/ui/sidebar"
+
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -16,7 +19,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="tr" suppressHydrationWarning>
       <body
-        className={`${montserrat.variable} antialiased bg-background`}
+        className={`${montserrat.variable} antialiased bg-background h-screen overflow-auto`}
       >
         <ThemeProvider
           attribute="class"
@@ -24,7 +27,14 @@ export default function RootLayout({ children }) {
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <SidebarProvider>
+            <main className="flex flex-1">
+              <nav>
+                <AppSidebar />
+              </nav>
+              {children}
+            </main>
+          </SidebarProvider>
         </ThemeProvider>
       </body>
     </html>
