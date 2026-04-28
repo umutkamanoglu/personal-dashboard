@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import { Switch } from "./components/ui/switch";
 import ThemeToggle from "./components/ThemeToggle";
 import System from "./pages/System";
+import Tmdb from "./pages/Tmdb";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/system" element={<System />} />
+            <Route path="/tmdb" element={<Tmdb />} />
           </Routes>
         </div>
       </main>

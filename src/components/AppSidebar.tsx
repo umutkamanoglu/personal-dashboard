@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { MonitorSpeaker, Home, Activity } from "lucide-react"
+import { MonitorSpeaker, Home, Activity, Clapperboard } from "lucide-react"
 import { Link } from "react-router-dom";
 
 export function AppSidebar() {
@@ -23,7 +23,12 @@ export function AppSidebar() {
       title: "Sistem İzleyici",
       path: "/system",
       icon: <Activity />
-    }
+    },
+     {
+      title: "Dizi Film",
+      path: "/tmdb",
+      icon: <Clapperboard />
+     }
   ]
 
   return (

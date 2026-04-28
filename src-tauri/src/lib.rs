@@ -1,5 +1,7 @@
 mod features;
 
+use features::tmdb::*;
+
 #[tauri::command]
 fn get_system_stats() -> features::monitor::SystemData {
     features::monitor::get_full_system_info()
@@ -9,7 +11,7 @@ fn get_system_stats() -> features::monitor::SystemData {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_system_stats])
+        .invoke_handler(tauri::generate_handler![get_system_stats, get_discover_movie, get_discover_series])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
