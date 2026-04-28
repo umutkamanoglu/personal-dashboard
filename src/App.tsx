@@ -7,6 +7,7 @@ import { Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import { Switch } from "./components/ui/switch";
 import ThemeToggle from "./components/ThemeToggle";
+import System from "./pages/System";
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
         <div className="flex-1 overflow-auto p-4">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/system" element={<System />} />
           </Routes>
         </div>
       </main>
