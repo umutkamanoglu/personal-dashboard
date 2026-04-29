@@ -133,4 +133,24 @@
   html {
     @apply font-sans;
   }
+  /* Scrollbar Geneli */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* Kaydırma Yolu (Track) */
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Kaydırma Çubuğu (Thumb) */
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full transition-colors;
+  }
+
+  /* Hover Durumu */
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
 }

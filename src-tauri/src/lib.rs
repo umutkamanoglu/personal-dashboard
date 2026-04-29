@@ -16,7 +16,8 @@ pub fn run() {
             get_discover_movie,
             get_discover_series,
             get_item_details,
-            search_all
+            search_all,
+            get_genres
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
