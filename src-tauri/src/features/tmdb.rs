@@ -16,7 +16,9 @@ pub async fn get_genres(media_type: String) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn get_discover_movie(page: i32, genre_id: Option<i32>) -> Result<Value, String> {
-    let genre_param = genre_id.map(|id| format!("&with_genres={}", id)).unwrap_or_default();
+    let genre_param = genre_id
+        .map(|id| format!("&with_genres={}", id))
+        .unwrap_or_default();
     let url = format!(
         "{}/discover/movie?api_key={}&language=tr-TR&page={}{}",
         BASE_URL, TMDB_API_KEY, page, genre_param
@@ -25,14 +27,18 @@ pub async fn get_discover_movie(page: i32, genre_id: Option<i32>) -> Result<Valu
     let mut data: Value = response.json().await.map_err(|e| e.to_string())?;
 
     if let Some(results) = data.get_mut("results").and_then(|v| v.as_array_mut()) {
-        for item in results { item["media_type"] = serde_json::json!("movie"); }
+        for item in results {
+            item["media_type"] = serde_json::json!("movie");
+        }
     }
     Ok(data)
 }
 
 #[tauri::command]
 pub async fn get_discover_series(page: i32, genre_id: Option<i32>) -> Result<Value, String> {
-    let genre_param = genre_id.map(|id| format!("&with_genres={}", id)).unwrap_or_default();
+    let genre_param = genre_id
+        .map(|id| format!("&with_genres={}", id))
+        .unwrap_or_default();
     let url = format!(
         "{}/discover/tv?api_key={}&language=tr-TR&page={}{}",
         BASE_URL, TMDB_API_KEY, page, genre_param
@@ -41,7 +47,9 @@ pub async fn get_discover_series(page: i32, genre_id: Option<i32>) -> Result<Val
     let mut data: Value = response.json().await.map_err(|e| e.to_string())?;
 
     if let Some(results) = data.get_mut("results").and_then(|v| v.as_array_mut()) {
-        for item in results { item["media_type"] = serde_json::json!("tv"); }
+        for item in results {
+            item["media_type"] = serde_json::json!("tv");
+        }
     }
     Ok(data)
 }
@@ -68,9 +76,7 @@ pub async fn search_all(query: String) -> Result<Value, String> {
 
     // Sadece film ve dizi sonuçlarını tut, kişileri (oyuncuları) listeden çıkar
     if let Some(results) = data.get_mut("results").and_then(|v| v.as_array_mut()) {
-        results.retain(|item| {
-            item["media_type"] == "movie" || item["media_type"] == "tv"
-        });
+        results.retain(|item| item["media_type"] == "movie" || item["media_type"] == "tv");
     }
 
     Ok(data)

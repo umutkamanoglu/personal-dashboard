@@ -10,6 +10,7 @@ import ThemeToggle from "./components/ThemeToggle";
 import System from "./pages/System";
 import Tmdb from "./pages/Tmdb";
 import WatchPage from "./pages/WatchPage";
+import Focus from "./pages/Focus";
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
             <Route path="/system" element={<System />} />
             <Route path="/tmdb" element={<Tmdb />} />
             <Route path="/watch/:type/:id" element={<WatchPage />} />
+            <Route path = "/focus" element={<Focus />} />
           </Routes>
         </div>
       </main>

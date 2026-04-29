@@ -1,8 +1,8 @@
-use serde::Serialize;
-use sysinfo::{System, Disks, Networks};
-use nvml_wrapper::Nvml;
-use std::sync::Mutex;
 use lazy_static::lazy_static;
+use nvml_wrapper::Nvml;
+use serde::Serialize;
+use std::sync::Mutex;
+use sysinfo::{Disks, Networks, System};
 
 // Global bir ağ nesnesi oluşturuyoruz ki veriler her istekte sıfırlanmasın
 lazy_static! {
@@ -51,7 +51,9 @@ pub fn get_full_system_info() -> SystemData {
         if let Ok(device) = nvml.device_by_index(0) {
             gpu_name = device.name().ok();
             gpu_usage = device.utilization_rates().ok().map(|u| u.gpu);
-            gpu_temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).ok();
+            gpu_temp = device
+                .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                .ok();
             gpu_mem_used = device.memory_info().ok().map(|m| m.used);
         }
     }
@@ -66,11 +68,16 @@ pub fn get_full_system_info() -> SystemData {
         gpu_usage,
         gpu_temp,
         gpu_mem_used,
-        disks: disks.iter().map(|d| (
-            d.mount_point().to_string_lossy().into(), 
-            d.total_space(), 
-            d.available_space()
-        )).collect(),
+        disks: disks
+            .iter()
+            .map(|d| {
+                (
+                    d.mount_point().to_string_lossy().into(),
+                    d.total_space(),
+                    d.available_space(),
+                )
+            })
+            .collect(),
         net_in,
         net_out,
         os: System::long_os_version().unwrap_or_default(),

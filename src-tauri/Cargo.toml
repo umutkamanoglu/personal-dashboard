@@ -33,3 +33,4 @@ windows = { version = "0.52", features = [
     "Storage_Streams"
 ] }
 base64 = "0.22.1"
+tauri-plugin-notification = "2"
