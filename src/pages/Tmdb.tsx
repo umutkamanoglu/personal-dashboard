@@ -2,20 +2,21 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MovieCard } from "@/components/MovieCard";
 import { motion, AnimatePresence } from "framer-motion";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Search, Loader2, Plus, Heart, BookmarkCheck } from "lucide-react";
+import { Search, Loader2, Plus, Heart, BookmarkCheck, Dices, Tv, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function DiscoverPage() {
+  const navigate = useNavigate();
   const [movies, setMovies] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [isRandomLoading, setIsRandomLoading] = useState(false); // Rastgele yükleme durumu
   const [searchQuery, setSearchQuery] = useState("");
   const [genres, setGenres] = useState<any[]>([]);
   const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
 
-  // Pagination States
   const [moviePage, setMoviePage] = useState(1);
   const [seriesPage, setSeriesPage] = useState(1);
   const [moreLoading, setMoreLoading] = useState({ movies: false, series: false });
@@ -25,7 +26,30 @@ export default function DiscoverPage() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Arama Fonksiyonu
+  // TAMAMEN RASTGELE SEÇİM FONKSİYONU
+  const handleRandomPlay = async (type: 'movie' | 'tv') => {
+    setIsRandomLoading(true);
+    try {
+      // 1 ile 500 arasında rastgele bir sayfa seç (TMDB sınırı)
+      const randomPage = Math.floor(Math.random() * 500) + 1;
+      
+      const data: any = await invoke(type === 'movie' ? "get_discover_movie" : "get_discover_series", { 
+        page: randomPage, 
+        genreId: selectedGenre 
+      });
+
+      if (data?.results?.length > 0) {
+        const randomIndex = Math.floor(Math.random() * data.results.length);
+        const randomItem = data.results[randomIndex];
+        navigate(`/watch/${type}/${randomItem.id}`);
+      }
+    } catch (err) {
+      console.error("Random selection error:", err);
+    } finally {
+      setIsRandomLoading(false);
+    }
+  };
+
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -50,7 +74,6 @@ export default function DiscoverPage() {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, performSearch]);
 
-  // Ana Veri Çekme (İlk Yükleme veya Kategori Değişimi)
   const fetchData = async (genreId: number | null = null) => {
     setLoading(true);
     setMoviePage(1);
@@ -71,7 +94,6 @@ export default function DiscoverPage() {
     }
   };
 
-  // "Daha Fazla" Yükleme Fonksiyonu
   const loadMore = async (type: 'movie' | 'tv') => {
     const isMovie = type === 'movie';
     const nextPage = isMovie ? moviePage + 1 : seriesPage + 1;
@@ -110,7 +132,7 @@ export default function DiscoverPage() {
   return (
     <div className="min-h-screen bg-background text-foreground p-6 md:p-12 pt-20">
       
-      {/* Header & Searchbox */}
+      {/* Header Section */}
       <div className="mb-10 flex flex-col md:flex-row justify-between items-end gap-6">
         <div className="flex flex-col">
           <h1 className="text-6xl font-black italic tracking-tighter bg-gradient-to-br from-foreground to-muted-foreground bg-clip-text text-transparent">
@@ -134,7 +156,7 @@ export default function DiscoverPage() {
       </div>
 
       {/* Kategori Barı */}
-      <div className="flex gap-3 overflow-x-auto pb-6 mb-8 no-scrollbar">
+      <div className="flex gap-3 overflow-x-auto pb-4 mb-4 no-scrollbar">
         <button 
           onClick={() => setSelectedGenre(null)}
           className={`px-6 py-2.5 rounded-xl text-[11px] font-bold transition-all ${!selectedGenre ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-muted/60 hover:bg-muted'}`}
@@ -152,6 +174,35 @@ export default function DiscoverPage() {
         ))}
       </div>
 
+      {/* GELİŞMİŞ RASTGELE SEÇİM BUTONLARI */}
+      {!searchQuery && (
+        <div className="flex flex-wrap gap-4 mb-10">
+          <button 
+            disabled={isRandomLoading}
+            onClick={() => handleRandomPlay('movie')}
+            className="flex items-center gap-3 px-6 py-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 border border-indigo-500/20 rounded-2xl transition-all group cursor-pointer disabled:opacity-50"
+          >
+            {isRandomLoading ? <Loader2 className="animate-spin" size={20} /> : <Dices size={20} className="group-hover:rotate-180 transition-transform duration-500" />}
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[10px] opacity-60 font-bold uppercase tracking-widest">Şanslı Hisset</span>
+              <span className="text-sm font-black uppercase">Rastgele Film</span>
+            </div>
+          </button>
+          
+          <button 
+            disabled={isRandomLoading}
+            onClick={() => handleRandomPlay('tv')}
+            className="flex items-center gap-3 px-6 py-3 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-500 border border-fuchsia-500/20 rounded-2xl transition-all group cursor-pointer disabled:opacity-50"
+          >
+            {isRandomLoading ? <Loader2 className="animate-spin" size={20} /> : <Tv size={20} className="group-hover:scale-110 transition-transform" />}
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[10px] opacity-60 font-bold uppercase tracking-widest">Ne İzlesem?</span>
+              <span className="text-sm font-black uppercase">Rastgele Dizi</span>
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* İÇERİK ALANI */}
       <AnimatePresence mode="wait">
         {searchQuery ? (
@@ -162,16 +213,16 @@ export default function DiscoverPage() {
             {/* FAVORİLER (LİSTEM) SECTION */}
             {favorites.length > 0 && (
               <div className="mb-16 p-8 rounded-[2.5rem] bg-gradient-to-r from-indigo-500/10 via-transparent to-transparent border border-indigo-500/20 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-10 opacity-10">
-                   <BookmarkCheck size={120} className="text-indigo-500" />
+                <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
+                   <Sparkles size={120} className="text-indigo-500" />
                 </div>
                 <div className="flex items-center gap-3 mb-8">
-                  <div className="p-2 bg-indigo-500 rounded-lg">
+                  <div className="p-2 bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20">
                     <Heart size={20} className="fill-white text-white" />
                   </div>
                   <h2 className="text-3xl font-black tracking-tight">Listem</h2>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 relative z-10">
                   {favorites.slice(0, 6).map((item) => (
                     <FavoriteCard key={item.id} item={item} onToggle={(e) => toggleFavorite(e, item)} />
                   ))}
@@ -203,12 +254,12 @@ export default function DiscoverPage() {
   );
 }
 
-// Alt Bileşen: Standart Section (Daha Fazla Butonu Eklendi)
+// Alt Bileşen: Standart Section
 function Section({ title, items, toggleFavorite, favs, onLoadMore, isMoreLoading }: any) {
   return (
     <div className="mb-12">
       <div className="flex items-center gap-4 mb-8">
-        <div className="h-8 w-1.5 bg-indigo-500 rounded-full" />
+        <div className="h-8 w-1.5 bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
         <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
@@ -217,7 +268,7 @@ function Section({ title, items, toggleFavorite, favs, onLoadMore, isMoreLoading
             <MovieCard item={item} index={idx}/>
             <button 
               onClick={(e) => toggleFavorite(e, item)}
-              className="absolute top-3 right-3 p-2.5 bg-black/40 backdrop-blur-md rounded-xl border border-white/10 opacity-0 group-hover:opacity-100 transition-all hover:scale-110 z-30"
+              className="absolute top-3 right-3 p-2.5 bg-black/40 backdrop-blur-md rounded-xl border border-white/10 opacity-0 group-hover:opacity-100 transition-all hover:scale-110 z-30 cursor-pointer"
             >
               <Heart size={16} className={favs.some((f: any) => f.id === item.id) ? "fill-red-500 text-red-500" : "text-white"} />
             </button>
@@ -230,7 +281,7 @@ function Section({ title, items, toggleFavorite, favs, onLoadMore, isMoreLoading
           <button 
             onClick={onLoadMore}
             disabled={isMoreLoading}
-            className="flex items-center gap-2 px-8 py-3 bg-muted/50 hover:bg-muted text-foreground rounded-2xl text-xs font-bold transition-all border border-border/50 disabled:opacity-50"
+            className="flex items-center gap-2 px-8 py-3 bg-muted/50 hover:bg-muted text-foreground rounded-2xl text-xs font-bold transition-all border border-border/50 disabled:opacity-50 cursor-pointer"
           >
             {isMoreLoading ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
             DAHA FAZLA GÖRÜNTÜLE
@@ -241,10 +292,10 @@ function Section({ title, items, toggleFavorite, favs, onLoadMore, isMoreLoading
   );
 }
 
-// Alt Bileşen: Favori Kartı (Değişmedi)
+// Alt Bileşen: Favori Kartı
 function FavoriteCard({ item, onToggle }: any) {
   return (
-    <motion.div whileHover={{ y: -10 }} className="relative aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border-2 border-indigo-500/30 group">
+    <motion.div whileHover={{ y: -10 }} className="relative aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border-2 border-indigo-500/30 group cursor-pointer">
       <img 
         src={`https://image.tmdb.org/t/p/w500${item.poster_path}`} 
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
@@ -252,7 +303,7 @@ function FavoriteCard({ item, onToggle }: any) {
       <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent" />
       <button 
         onClick={onToggle}
-        className="absolute top-2 right-2 p-2 bg-red-500 rounded-lg shadow-lg z-10"
+        className="absolute top-2 right-2 p-2 bg-red-500 rounded-lg shadow-lg z-10 cursor-pointer hover:scale-110 transition-transform"
       >
         <Heart size={14} className="fill-white text-white" />
       </button>
