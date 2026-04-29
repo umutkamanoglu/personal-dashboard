@@ -9,6 +9,7 @@ import { Switch } from "./components/ui/switch";
 import ThemeToggle from "./components/ThemeToggle";
 import System from "./pages/System";
 import Tmdb from "./pages/Tmdb";
+import WatchPage from "./pages/WatchPage";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/system" element={<System />} />
             <Route path="/tmdb" element={<Tmdb />} />
+            <Route path="/watch/:type/:id" element={<WatchPage />} />
           </Routes>
         </div>
       </main>

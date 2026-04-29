@@ -11,7 +11,13 @@ fn get_system_stats() -> features::monitor::SystemData {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_system_stats, get_discover_movie, get_discover_series])
+        .invoke_handler(tauri::generate_handler![
+            get_system_stats,
+            get_discover_movie,
+            get_discover_series,
+            get_item_details,
+            search_all
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
