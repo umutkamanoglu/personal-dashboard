@@ -224,7 +224,7 @@ export default function DiscoverPage() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 relative z-10">
                   {favorites.slice(0, 6).map((item) => (
-                    <FavoriteCard key={item.id} item={item} onToggle={(e) => toggleFavorite(e, item)} />
+                    <FavoriteCard key={item.id} item={item} onToggle={(e: any) => toggleFavorite(e, item)} />
                   ))}
                 </div>
               </div>

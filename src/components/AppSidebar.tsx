@@ -51,7 +51,6 @@ export function AppSidebar() {
           <SidebarMenu>
             <SidebarMenuItem>
               {routes.map((route, key) => {
-                console.log(route)
                 return (
                   <SidebarMenuButton key={key} asChild>
                     <Link to={route.path}>
