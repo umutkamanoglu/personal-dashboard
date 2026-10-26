@@ -225,66 +225,86 @@ pub struct DashboardData {
     /// aktif pomodoro seansı (yoksa None)
     #[serde(default)]
     pub pomodoro: Option<Pomodoro>,
-    /// anasayfa kart sırası (tıklanabilir kart anahtarları)
+    /// anasayfa kart sırası (yalnızca listede olanlar gösterilir)
     #[serde(default = "default_home_order")]
     pub home_order: Vec<String>,
-    /// anasayfadan gizlenen kartlar
+    /// kart genişlikleri (anahtar -> 1 veya 2 sütun)
     #[serde(default)]
-    pub home_hidden: Vec<String>,
-    /// anasayfa kart boyutu: "kucuk" | "orta" | "buyuk"
-    #[serde(default = "default_home_size")]
-    pub home_size: String,
+    pub home_spans: HashMap<String, u8>,
 }
 
-pub const HOME_CARD_KEYS: [&str; 6] = [
-    "schedule", "habits", "routines", "notes", "pomodoro", "system",
+/// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
+pub const HOME_CARD_KEYS: [&str; 12] = [
+    "schedule", "habits", "routines", "notes", "pomodoro", "system", "cpu", "ram", "gpu", "disks",
+    "temps", "general",
 ];
 
 fn default_home_order() -> Vec<String> {
-    HOME_CARD_KEYS.iter().map(|k| k.to_string()).collect()
-}
-fn default_home_size() -> String {
-    "orta".into()
+    HOME_CARD_KEYS
+        .iter()
+        .take(6)
+        .map(|k| k.to_string())
+        .collect()
 }
 
 impl DashboardData {
-    /// Anasayfa düzeni: görünür kartlar sırayla (sıra listesine hiç
-    /// eklenmemiş kartlar en sona eklenir).
+    /// Anasayfa düzeni: sırası kaydedilmiş kartlar (görünür = listede olan).
     pub fn home_cards_visible(&self) -> Vec<&'static str> {
-        let ordered: Vec<&'static str> = self
-            .home_order
+        self.home_order
             .iter()
-            .filter_map(|k| {
-                HOME_CARD_KEYS
-                    .iter()
-                    .copied()
-                    .find(|c| *c == k.as_str())
-                    .filter(|c| !self.home_hidden.iter().any(|h| h == c))
-            })
-            .collect();
-        let rest = HOME_CARD_KEYS
-            .into_iter()
-            .filter(|k| !ordered.contains(k) && !self.home_hidden.iter().any(|h| h == k))
-            .collect::<Vec<_>>();
-        ordered.into_iter().chain(rest).collect()
+            .filter_map(|k| HOME_CARD_KEYS.iter().copied().find(|c| *c == k.as_str()))
+            .collect()
     }
 
-    pub fn toggle_home_card(&mut self, key: &str) {
-        if self.home_hidden.iter().any(|k| k == key) {
-            self.home_hidden.retain(|k| k != key);
-        } else {
-            if !self.home_order.iter().any(|k| k == key) {
-                self.home_order.push(key.to_string());
-            }
-            self.home_hidden.push(key.to_string());
+    /// Anasayfaya henüz eklenmemiş kartlar.
+    pub fn home_cards_available(&self) -> Vec<&'static str> {
+        HOME_CARD_KEYS
+            .iter()
+            .copied()
+            .filter(|k| !self.home_order.iter().any(|o| o == k))
+            .collect()
+    }
+
+    /// Kart genişliği (sütun sayısı, 1 veya 2).
+    pub fn home_card_span(&self, key: &str) -> u8 {
+        self.home_spans
+            .get(key)
+            .copied()
+            .filter(|s| *s == 1 || *s == 2)
+            .unwrap_or(1)
+    }
+
+    pub fn add_home_card(&mut self, key: &str) {
+        if !HOME_CARD_KEYS.contains(&key) {
+            return;
         }
-        self.save();
+        if !self.home_order.iter().any(|k| k == key) {
+            self.home_order.push(key.to_string());
+            self.save();
+        }
+    }
+
+    pub fn remove_home_card(&mut self, key: &str) {
+        let len = self.home_order.len();
+        self.home_order.retain(|k| k != key);
+        if self.home_order.len() != len {
+            self.save();
+        }
+    }
+
+    pub fn set_home_span(&mut self, key: &str, span: u8) {
+        let span = if span == 2 { 2 } else { 1 };
+        if self.home_card_span(key) != span {
+            if span == 1 {
+                self.home_spans.remove(key);
+            } else {
+                self.home_spans.insert(key.to_string(), span);
+            }
+            self.save();
+        }
     }
 
     pub fn move_home_card(&mut self, key: &str, up: bool) {
-        if self.home_hidden.iter().any(|k| k == key) {
-            return;
-        }
         if let Some(ix) = self.home_order.iter().position(|k| k == key) {
             let target = if up { ix.saturating_sub(1) } else { ix + 1 };
             if target < self.home_order.len() {
@@ -292,11 +312,6 @@ impl DashboardData {
                 self.save();
             }
         }
-    }
-
-    pub fn set_home_size(&mut self, size: &str) {
-        self.home_size = size.to_string();
-        self.save();
     }
 }
 
@@ -320,17 +335,10 @@ impl DashboardData {
 
     pub fn load() -> Self {
         let path = Self::storage_path();
-        let mut data: DashboardData = fs::read(path)
+        fs::read(path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
-        // yeni kart anahtarlarını sıraya ekle (eski veri dosyaları için)
-        for k in HOME_CARD_KEYS {
-            if !data.home_order.iter().any(|o| o == k) {
-                data.home_order.push(k.to_string());
-            }
-        }
-        data
+            .unwrap_or_default()
     }
 
     pub fn save(&self) {

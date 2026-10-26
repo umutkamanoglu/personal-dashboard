@@ -28,13 +28,19 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .into_any_element()
 }
 
-const CARD_LABELS: [(&str, &str); 6] = [
+const CARD_LABELS: [(&str, &str); 12] = [
     ("schedule", "Bugünün programı"),
     ("habits", "Alışkanlıklar"),
     ("routines", "Rutinler"),
     ("notes", "Notlar & hatırlatıcılar"),
     ("pomodoro", "Pomodoro"),
-    ("system", "Sistem"),
+    ("system", "Sistem özeti"),
+    ("cpu", "CPU"),
+    ("ram", "RAM"),
+    ("gpu", "GPU"),
+    ("disks", "Diskler"),
+    ("temps", "Sıcaklıklar"),
+    ("general", "Bilgisayar"),
 ];
 
 fn card_label(key: &str) -> &'static str {
@@ -46,52 +52,58 @@ fn card_label(key: &str) -> &'static str {
     "Sistem"
 }
 
-/// Kullanıcının anasayfa ızgarasını özelleştirdiği kart:
-/// kart görünürlüğü/sırası ve kart boyutu.
+/// Kullanıcının anasayfa ızgarasını özelleştirdiği kart koleksiyonu:
+/// kart ekle/çıkar, sıralama ve genişlik (1 = yarım sütun, 2 = tam sütun).
 fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
-    use gpui_kit::prelude::FluentBuilder as _;
     let data = cx.global::<DashboardData>().clone();
     let mut card = card(cx)
         .gap_3()
-        .child(div().text_sm().font_medium().child("Anasayfa düzeni"));
+        .child(div().text_sm().font_medium().child("Anasayfa kartları"));
 
-    // sıra + gizle/göster
+    // sıradaki kartlar: genişlik + sıra + çıkar
     card = card.children(data.home_order.iter().map(|key| {
         let key = key.clone();
-        let hidden = data.home_hidden.contains(&key);
-        let label = card_label(&key);
+        let wide = data.home_card_span(&key) == 2;
         h_flex()
             .gap_2()
             .items_center()
             .py_1()
             .child(
-                // gizle/göster
                 Button::new(SharedString::from(format!("home-vis-{}", key)))
                     .xsmall()
                     .ghost()
-                    .icon(if hidden {
-                        IconName::Close
-                    } else {
-                        IconName::CircleCheck
-                    })
-                    .tooltip(if hidden { "Göster" } else { "Gizle" })
+                    .icon(IconName::Close)
+                    .tooltip("Kaldır")
                     .on_click(cx.listener({
                         let key = key.clone();
                         move |_, _, _, cx| {
-                            cx.global_mut::<DashboardData>().toggle_home_card(&key);
+                            cx.global_mut::<DashboardData>().remove_home_card(&key);
+                            cx.notify();
+                        }
+                    })),
+            )
+            .child(div().flex_1().text_sm().child(format!(
+                "{}{}",
+                card_label(&key),
+                if wide { " (geniş)" } else { "" }
+            )))
+            .child(
+                Button::new(SharedString::from(format!("home-span-{}", key)))
+                    .xsmall()
+                    .ghost()
+                    .label(if wide { "2 sütun" } else { "1 sütun" })
+                    .tooltip("Genişliği değiştir")
+                    .on_click(cx.listener({
+                        let key = key.clone();
+                        move |_, _, _, cx| {
+                            let span = cx.global::<DashboardData>().home_card_span(&key);
+                            cx.global_mut::<DashboardData>()
+                                .set_home_span(&key, if span == 2 { 1 } else { 2 });
                             cx.notify();
                         }
                     })),
             )
             .child(
-                div()
-                    .flex_1()
-                    .text_sm()
-                    .when(hidden, |r| r.text_color(cx.theme().muted_foreground))
-                    .child(format!("{}{}", label, if hidden { " (gizli)" } else { "" })),
-            )
-            .child(
-                // yukarı taşı
                 Button::new(SharedString::from(format!("home-up-{}", key)))
                     .xsmall()
                     .ghost()
@@ -106,7 +118,6 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
                     })),
             )
             .child(
-                // aşağı taşı
                 Button::new(SharedString::from(format!("home-down-{}", key)))
                     .xsmall()
                     .ghost()
@@ -122,38 +133,40 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
             )
     }));
 
-    // ölü kart satırı yoksa uyarı yerine: tüm kartlar gizliyse bilgi
-    card = card.child(
-        div()
-            .text_xs()
-            .text_color(cx.theme().muted_foreground)
-            .child("Tüm kartlar gizlenirse anasayfada sadece saat görünür."),
-    );
+    // koleksiyondan eklenebilir kartlar
+    let available = data.home_cards_available();
+    if !available.is_empty() {
+        card = card.child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child("Eklenebilir kartlar:"),
+        );
+        card = card.child(
+            h_flex()
+                .gap_2()
+                .flex_wrap()
+                .children(available.iter().map(|key| {
+                    Button::new(SharedString::from(format!("home-add-{}", key)))
+                        .xsmall()
+                        .ghost()
+                        .label(format!("+ {}", card_label(key)))
+                        .on_click(cx.listener({
+                            let key = key.to_string();
+                            move |_, _, _, cx| {
+                                cx.global_mut::<DashboardData>().add_home_card(&key);
+                                cx.notify();
+                            }
+                        }))
+                })),
+        );
+    }
 
-    // kart boyutu
     card.child(
-        RadioGroup::new("home-size")
-            .children(["Küçük", "Orta", "Büyük"])
-            .selected_index(Some(match data.home_size.as_str() {
-                "kucuk" => 0,
-                "orta" => 1,
-                _ => 2,
-            }))
-            .on_change(cx.listener(|_, index, _, cx| {
-                let size = match *index {
-                    0 => "kucuk",
-                    1 => "orta",
-                    _ => "buyuk",
-                };
-                cx.global_mut::<DashboardData>().set_home_size(size);
-                cx.notify();
-            })),
-    )
-    .child(
         div()
             .text_xs()
             .text_color(cx.theme().muted_foreground)
-            .child("Kart yüksekliği (grid boyutu)."),
+            .child("Geniş 2 sütunun tamamını kaplar; 1 sütun kartlar yan yana dizilir. Her satırdaki kartlar aynı uzunlukta uzar."),
     )
 }
 
