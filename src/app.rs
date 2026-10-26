@@ -20,6 +20,7 @@ pub enum Page {
     Schedule,
     Habits,
     Routines,
+    Stats,
 }
 
 impl Page {
@@ -29,10 +30,17 @@ impl Page {
             Page::Schedule => "Saatler",
             Page::Habits => "Alışkanlıklar",
             Page::Routines => "Rutinler",
+            Page::Stats => "İstatistik",
         }
     }
 
-    const ALL: [Page; 4] = [Page::Home, Page::Schedule, Page::Habits, Page::Routines];
+    const ALL: [Page; 5] = [
+        Page::Home,
+        Page::Schedule,
+        Page::Habits,
+        Page::Routines,
+        Page::Stats,
+    ];
 
     fn icon(self) -> IconName {
         match self {
@@ -40,6 +48,7 @@ impl Page {
             Page::Schedule => IconName::Calendar,
             Page::Habits => IconName::CircleCheck,
             Page::Routines => IconName::RefreshCw,
+            Page::Stats => IconName::ChartPie,
         }
     }
 }
@@ -177,6 +186,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Schedule => pages::schedule_page(self, cx),
             Page::Habits => pages::habits_page(self, window, cx),
             Page::Routines => pages::routines_page(self, window, cx),
+            Page::Stats => pages::stats_page(self, cx),
         };
 
         v_flex()

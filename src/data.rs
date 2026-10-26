@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use chrono::{Datelike, Duration, Local, NaiveDate, Timelike, Weekday};
+use chrono::{Datelike, Duration, Local, Months, NaiveDate, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -285,6 +285,64 @@ impl DashboardData {
         (done, total)
     }
 
+    /// Rutinin son `days` gün içinde yapıldığı gün sayısı.
+    pub fn routine_week_count(&self, id: &str, days: u32) -> u32 {
+        let Some(set) = self.routine_checks.get(id) else {
+            return 0;
+        };
+        let cutoff = today() - Duration::days(days as i64);
+        set.range(cutoff..).count() as u32
+    }
+
+    /// Alışkanlığın son `periods` dönemdeki durumları: (dönem başı tarihi, yapıldı mı).
+    /// Eskiden yeniye sıralı. Dönem başı: Daily = gün, Weekly = haftanın herhangi bir
+    /// günü (anahtar haftanın Pazartesisini verir), Monthly = ayın herhangi bir günü.
+    pub fn habit_history(&self, habit: &Habit, periods: usize) -> Vec<(NaiveDate, bool)> {
+        let mut out = Vec::with_capacity(periods);
+        for i in 0..periods {
+            let date = match habit.frequency {
+                Frequency::Daily => today() - Duration::days(i as i64),
+                Frequency::Weekly => today() - Duration::weeks(i as i64),
+                Frequency::Monthly => today() - Months::new(i as u32),
+            };
+            out.push((date, self.habit_done(habit, date)));
+        }
+        out.reverse();
+        out
+    }
+
+    /// Son `days` gün için (tarih, o gün tamamlanan günlük alışkanlık + rutin sayısı, toplam).
+    /// Eskiden yeniye sıralı.
+    pub fn daily_history(&self, days: usize) -> Vec<(NaiveDate, usize, usize)> {
+        let daily_total = self
+            .habits
+            .iter()
+            .filter(|h| h.frequency == Frequency::Daily)
+            .count()
+            + self.routine_items.len();
+        let mut out = Vec::with_capacity(days);
+        for i in 0..days {
+            let date = today() - Duration::days((days - 1 - i) as i64);
+            let mut done = 0;
+            for habit in self
+                .habits
+                .iter()
+                .filter(|h| h.frequency == Frequency::Daily)
+            {
+                if self.habit_done(habit, date) {
+                    done += 1;
+                }
+            }
+            for item in &self.routine_items {
+                if self.routine_done(&item.id, date) {
+                    done += 1;
+                }
+            }
+            out.push((date, done, daily_total));
+        }
+        out
+    }
+
     // --- Schedule (saatler) ---
 
     pub fn add_schedule(&mut self, name: String, start: String, end: String, days: Vec<u8>) {
@@ -480,5 +538,48 @@ mod tests {
         assert_eq!(data.schedule_for(6).len(), 1);
         data.remove_schedule("t-akşam");
         assert_eq!(data.schedule.len(), 2);
+    }
+
+    #[test]
+    fn habit_history_counts_periods() {
+        let (mut data, id) = habit(Frequency::Daily);
+        let habit = data.habits[0].clone();
+        data.habit_completions
+            .entry(id.clone())
+            .or_default()
+            .insert("2026-10-25".to_string()); // dün
+        data.habit_completions
+            .entry(id)
+            .or_default()
+            .insert("2026-10-23".to_string()); // iki gün önce
+        let history = data.habit_history(&habit, 7);
+        assert_eq!(history.len(), 7);
+        // eskiden yeniye sıralı: son gün bugün, yapılmadı
+        assert!(!history[6].1);
+        assert!(history[5].1); // dün
+        assert!(!history[4].1);
+        assert!(history[3].1); // iki gün önce
+
+        let rate = data.daily_history(7);
+        assert_eq!(rate.len(), 7);
+        // son gün: 0/1 (alışkanlık bugün yapılmadı)
+        assert_eq!(rate[6].0, today());
+        assert_eq!(rate[6].1, 0);
+        assert_eq!(rate[6].2, 1);
+    }
+
+    #[test]
+    fn routine_week_count() {
+        let mut data = DashboardData::default();
+        data.routine_checks
+            .entry("t-r1".to_string())
+            .or_default()
+            .insert(date(2026, 10, 26));
+        data.routine_checks
+            .entry("t-r1".to_string())
+            .or_default()
+            .insert(date(2026, 9, 1)); // 30 günden eski
+        assert_eq!(data.routine_week_count("t-r1", 30), 1);
+        assert_eq!(data.routine_week_count("t-yok", 30), 0);
     }
 }

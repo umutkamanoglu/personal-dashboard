@@ -9,6 +9,7 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 - **Saatler:** günde hangi saatte ne var? gün/gün aralıklarıyla program ekleyin (Haftalık görünümü)
 - **Alışkanlık takibi:** günlük, haftalık ve aylık frekansta alışkanlıklar; seri (streak) göstergesi
 - **Günlük rutinler:** her gün sıfırlanan rutin checklist'i
+- **İstatistik:** son 7 gün tamamlama sütun grafiği ve alışkanlık başına dönem geçmişi
 - **Kalıcı veri:** veriler `%APPDATA%\personal-dashboard\data.json` içinde JSON olarak saklanır
 
 ## Geliştirme
@@ -19,6 +20,5 @@ cargo run
 
 ## Yol Haritası
 
-- istatistik/grafik görünümü (haftalık & aylık grafikler)
 - notlar, hatırlatıcılar ve Pomodoro modülü
 - tema (açık/koyu) geçişi ve özelleştirme
