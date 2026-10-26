@@ -1,6 +1,7 @@
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
+    checkbox::Checkbox,
     h_flex,
     input::Input,
     radio::RadioGroup,
@@ -24,11 +25,12 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .child(profile_card(view, cx))
         .child(theme_card(cx))
         .child(pomodoro_card(cx))
+        .child(visualizer_card(cx))
         .child(home_layout_card(cx))
         .into_any_element()
 }
 
-const CARD_LABELS: [(&str, &str); 14] = [
+pub const CARD_LABELS: [(&str, &str); 15] = [
     ("schedule", "Bugünün programı"),
     ("habits", "Alışkanlıklar"),
     ("routines", "Rutinler"),
@@ -43,6 +45,7 @@ const CARD_LABELS: [(&str, &str); 14] = [
     ("general", "Bilgisayar"),
     ("network", "Ağ"),
     ("media", "Medya"),
+    ("visualizer", "Görselleştirici"),
 ];
 
 fn card_label(key: &str) -> &'static str {
@@ -340,6 +343,102 @@ fn pomodoro_card(cx: &mut Context<DashboardView>) -> Div {
                                     cx.notify();
                                 })),
                         ),
+                ),
+        )
+}
+
+const VIZ_BAR_OPTIONS: [u8; 5] = [16, 24, 32, 48, 64];
+const VIZ_COLOR_OPTIONS: [&str; 6] = [
+    "accent", "primary", "success", "warning", "danger", "rainbow",
+];
+const VIZ_COLOR_LABELS: [&str; 6] = ["Vurgu", "Ana", "Yeşil", "Sarı", "Kırmızı", "Gökkuşağı"];
+
+/// Görselleştirici kartını özelleştirme (CAVA tarzı ses görselleştirici):
+/// bar sayısı, bar rengi, aynalanma ve tepe göstergesi.
+fn visualizer_card(cx: &mut Context<DashboardView>) -> Div {
+    let (bars, color, mirror, peaks) = {
+        let d = cx.global::<DashboardData>();
+        (d.viz_bars, d.viz_color.clone(), d.viz_mirror, d.viz_peaks)
+    };
+    let bar_idx = VIZ_BAR_OPTIONS.iter().position(|o| *o == bars).unwrap_or(1);
+    let color_idx = VIZ_COLOR_OPTIONS
+        .iter()
+        .position(|o| *o == color)
+        .unwrap_or(0);
+
+    card(cx)
+        .gap_3()
+        .child(
+            div()
+                .text_sm()
+                .font_medium()
+                .child("Görselleştirici görünümü"),
+        )
+        .child(
+            h_flex()
+                .gap_6()
+                .items_center()
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Bar sayısı"),
+                        )
+                        .child(
+                            RadioGroup::new("viz-bars")
+                                .children(VIZ_BAR_OPTIONS.iter().map(|b| b.to_string()))
+                                .selected_index(Some(bar_idx))
+                                .on_change(cx.listener(|_, index, _, cx| {
+                                    let bars = VIZ_BAR_OPTIONS[*index];
+                                    cx.global_mut::<DashboardData>().set_viz_bars(bars);
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Bar rengi"),
+                        )
+                        .child(
+                            RadioGroup::new("viz-color")
+                                .children(VIZ_COLOR_LABELS)
+                                .selected_index(Some(color_idx))
+                                .on_change(cx.listener(|_, index, _, cx| {
+                                    let color = VIZ_COLOR_OPTIONS[*index];
+                                    cx.global_mut::<DashboardData>().set_viz_color(color);
+                                    cx.notify();
+                                })),
+                        ),
+                ),
+        )
+        .child(
+            h_flex()
+                .gap_4()
+                .child(
+                    Checkbox::new("viz-mirror")
+                        .label("Aynalanmış (ortada)")
+                        .checked(mirror)
+                        .on_change(cx.listener(|_, checked, _, cx| {
+                            cx.global_mut::<DashboardData>().set_viz_mirror(*checked);
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Checkbox::new("viz-peaks")
+                        .label("Tepe göstergesi")
+                        .checked(peaks)
+                        .on_change(cx.listener(|_, checked, _, cx| {
+                            cx.global_mut::<DashboardData>().set_viz_peaks(*checked);
+                            cx.notify();
+                        })),
                 ),
         )
 }

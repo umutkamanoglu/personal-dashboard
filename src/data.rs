@@ -231,12 +231,37 @@ pub struct DashboardData {
     /// kart genişlikleri (anahtar -> 1 veya 2 sütun)
     #[serde(default)]
     pub home_spans: HashMap<String, u8>,
+    /// görselleştirici bar sayısı
+    #[serde(default = "default_viz_bars")]
+    pub viz_bars: u8,
+    /// bar rengi: accent/primary/success/warning/danger/rainbow
+    #[serde(default = "default_viz_color")]
+    pub viz_color: String,
+    /// barlar ortadan aynalanır mı
+    #[serde(default)]
+    pub viz_mirror: bool,
+    /// bar üstlerinde tepe göstergesi
+    #[serde(default = "default_viz_peaks")]
+    pub viz_peaks: bool,
 }
 
 /// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
-pub const HOME_CARD_KEYS: [&str; 14] = [
-    "schedule", "habits", "routines", "notes", "pomodoro", "system", "cpu", "ram", "gpu", "disks",
-    "temps", "general", "network", "media",
+pub const HOME_CARD_KEYS: [&str; 15] = [
+    "schedule",
+    "habits",
+    "routines",
+    "notes",
+    "pomodoro",
+    "system",
+    "cpu",
+    "ram",
+    "gpu",
+    "disks",
+    "temps",
+    "general",
+    "network",
+    "media",
+    "visualizer",
 ];
 
 fn default_home_order() -> Vec<String> {
@@ -318,6 +343,15 @@ impl DashboardData {
 fn default_name() -> String {
     "Umut".into()
 }
+fn default_viz_bars() -> u8 {
+    28
+}
+fn default_viz_color() -> String {
+    "accent".into()
+}
+fn default_viz_peaks() -> bool {
+    true
+}
 fn default_work_min() -> u32 {
     25
 }
@@ -335,10 +369,12 @@ impl DashboardData {
 
     pub fn load() -> Self {
         let path = Self::storage_path();
+        // parse başarısızsa struct default'u (hepsi sıfır) devreye girer;
+        // bunun yerine "{}" parse ederek alan serde default'larını kullan
         fs::read(path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+            .unwrap_or_else(|| serde_json::from_slice(b"{}").unwrap())
     }
 
     pub fn save(&self) {
@@ -377,6 +413,36 @@ impl DashboardData {
     pub fn set_dark_mode(&mut self, dark: bool) {
         self.dark_mode = dark;
         self.save();
+    }
+
+    // --- Görselleştirici ---
+
+    pub fn set_viz_bars(&mut self, bars: u8) {
+        if self.viz_bars != bars {
+            self.viz_bars = bars;
+            self.save();
+        }
+    }
+
+    pub fn set_viz_color(&mut self, color: &str) {
+        if self.viz_color != color {
+            self.viz_color = color.into();
+            self.save();
+        }
+    }
+
+    pub fn set_viz_mirror(&mut self, mirror: bool) {
+        if self.viz_mirror != mirror {
+            self.viz_mirror = mirror;
+            self.save();
+        }
+    }
+
+    pub fn set_viz_peaks(&mut self, peaks: bool) {
+        if self.viz_peaks != peaks {
+            self.viz_peaks = peaks;
+            self.save();
+        }
     }
 
     /// Profil ve pomodoro varsayılanlarını kaydeder.

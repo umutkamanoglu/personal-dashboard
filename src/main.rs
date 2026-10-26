@@ -1,4 +1,5 @@
 mod app;
+mod audio;
 mod data;
 mod hardware;
 mod media;
@@ -17,6 +18,8 @@ fn main() {
             cx.set_global(data);
             cx.set_global(hardware::HardwareInfo::new());
             cx.set_global(media::MediaState::default());
+            // ses görselleştirici: arka plan yakalama iş parçacığını başlat
+            cx.set_global(audio::start());
 
             // kayıtlı tema tercihi uygulanır
             {

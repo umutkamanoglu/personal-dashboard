@@ -13,6 +13,7 @@ use gpui_kit::{
 
 use super::{card, progress_bar};
 use crate::app::{DashboardView, Page};
+use crate::audio;
 use crate::data::{self, DashboardData, PomodoroPhase};
 use crate::hardware::HardwareInfo;
 use crate::media::{self, MediaCmd, MediaState};
@@ -291,6 +292,7 @@ pub fn card_body(
         "general" => general_home_card(cx),
         "network" => network_home_card(cx),
         "media" => media_home_card(cx),
+        "visualizer" => visualizer_home_card(cx),
         _ => notes_card(data, cx),
     }
 }
@@ -883,4 +885,112 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
     );
 
     card
+}
+
+/// CAVA tarzı görselleştirici kartı: WASAPI loopback ile yakalanan sistem
+/// sesinin frekans bantları bar olarak çizilir; görünüm ayarlardan seçilir.
+fn visualizer_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let (count, color_key, mirror, peaks) = {
+        let d = cx.global::<DashboardData>();
+        (
+            d.viz_bars as usize,
+            d.viz_color.clone(),
+            d.viz_mirror,
+            d.viz_peaks,
+        )
+    };
+    let levels = cx.global::<audio::VisualizerState>().snapshot(count);
+    let peak_level = levels.iter().cloned().fold(0., f32::max);
+    let app_err = cx.global::<audio::VisualizerState>().error_text();
+
+    let theme = cx.theme();
+    let bar_color = |i: usize| match color_key.as_str() {
+        "primary" => theme.primary,
+        "success" => theme.success,
+        "warning" => theme.warning,
+        "danger" => theme.danger,
+        // gökkuşağı: bar sırasına göre hue
+        "rainbow" => gpui_kit::Hsla {
+            h: 0.72 - 0.72 * ((i + 1) as f32 / count.max(1) as f32),
+            s: 0.85,
+            l: 0.55,
+            a: 1.,
+        },
+        _ => theme.accent,
+    };
+
+    let height = 96.;
+    let row = h_flex().gap(px(2.)).w_full().h(px(height));
+    let row = if mirror {
+        row.items_center()
+            .children(levels.iter().enumerate().map(|(i, &v)| {
+                let color = bar_color(i);
+                let half = (v * height * 0.45).max(2.);
+                v_flex()
+                    .flex_grow(1.)
+                    .min_w(px(2.))
+                    .gap(px(2.))
+                    .items_center()
+                    .child(
+                        div()
+                            .w_full()
+                            .h(px(half))
+                            .rounded_t_sm()
+                            .bg(color.opacity(0.85)),
+                    )
+                    .child(
+                        div()
+                            .w_full()
+                            .h(px(half))
+                            .rounded_b_sm()
+                            .bg(color.opacity(0.85)),
+                    )
+            }))
+    } else {
+        row.items_end()
+            .children(levels.iter().enumerate().map(|(i, &v)| {
+                let color = bar_color(i);
+                let size = (v * height).max(2.);
+                v_flex()
+                    .flex_grow(1.)
+                    .min_w(px(2.))
+                    .items_center()
+                    .when(peaks && v > 0.02, |col| {
+                        col.child(
+                            div()
+                                .w_full()
+                                .h(px(2.))
+                                .rounded_t_sm()
+                                .bg(color.opacity(0.35)),
+                        )
+                    })
+                    .child(div().w_full().h(px(size)).rounded_t_sm().bg(color))
+            }))
+    };
+
+    let mut out = card(cx).gap_2().child(
+        h_flex()
+            .justify_between()
+            .items_center()
+            .child(div().font_semibold().text_sm().child("Görselleştirici"))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("{} bar", count)),
+            ),
+    );
+    out = out.child(row);
+    if peak_level < 0.01 {
+        out = out.child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(match app_err {
+                    Some(e) => format!("Ses yakalanamadı: {}", e),
+                    None => "Sistem sesi çalarken barlar hareket eder".to_string(),
+                }),
+        );
+    }
+    out
 }
