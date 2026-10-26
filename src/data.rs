@@ -168,6 +168,9 @@ pub struct DashboardData {
     /// saat dilimleri
     #[serde(default)]
     pub schedule: Vec<ScheduleEntry>,
+    /// koyu tema mı (kaydedilir, açık tema varsayılan)
+    #[serde(default)]
+    pub dark_mode: bool,
 }
 
 impl DashboardData {
@@ -215,6 +218,12 @@ impl DashboardData {
             frequency,
             created_at: today(),
         });
+        self.save();
+    }
+
+    /// Tema tercihi kaydı.
+    pub fn set_dark_mode(&mut self, dark: bool) {
+        self.dark_mode = dark;
         self.save();
     }
 

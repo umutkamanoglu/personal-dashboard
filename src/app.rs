@@ -1,9 +1,10 @@
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{
+    button::{Button, ButtonVariants as _},
     h_flex,
     input::InputState,
     sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
-    v_flex, ActiveTheme, IconName, TitleBar,
+    v_flex, ActiveTheme, IconName, Sizable as _, TitleBar,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -175,6 +176,27 @@ impl DashboardView {
     }
 }
 
+/// Sağ üstteki ay/güneş tema düğmesi.
+fn theme_button(cx: &mut Context<DashboardView>) -> Button {
+    let dark = cx.theme().mode.is_dark();
+    Button::new("theme-toggle")
+        .xsmall()
+        .ghost()
+        .icon(if dark { IconName::Sun } else { IconName::Moon })
+        .tooltip(if dark { "Açık tema" } else { "Koyu tema" })
+        .on_click(|_, _, cx| {
+            let dark = cx.theme().mode.is_dark();
+            let mode = if dark {
+                gpui_kit::component::ThemeMode::Light
+            } else {
+                gpui_kit::component::ThemeMode::Dark
+            };
+            cx.global_mut::<crate::data::DashboardData>()
+                .set_dark_mode(!dark);
+            gpui_kit::component::Theme::change(mode, None, cx);
+        })
+}
+
 impl gpui_kit::Render for DashboardView {
     fn render(
         &mut self,
@@ -201,10 +223,16 @@ impl gpui_kit::Render for DashboardView {
                         .justify_between()
                         .child("Personal Dashboard")
                         .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(data::today_tr()),
+                            h_flex()
+                                .gap_2()
+                                .items_center()
+                                .child(theme_button(cx))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(data::today_tr()),
+                                ),
                         ),
                 ),
             )
