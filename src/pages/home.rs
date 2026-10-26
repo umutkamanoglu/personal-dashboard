@@ -280,7 +280,6 @@ fn clickable(
     min_h: f32,
     cx: &mut Context<DashboardView>,
 ) -> gpui_kit::AnyElement {
-    let radius = cx.theme().radius;
     let weak = cx.entity().downgrade();
     div()
         .id(SharedString::from(format!("go-{:?}", page)))
@@ -288,8 +287,6 @@ fn clickable(
         .flex_1()
         .min_h(px(min_h))
         .w_full()
-        .rounded(radius)
-        .hover(|s| s.shadow_md())
         .child(inner)
         .on_click(move |_, _, cx| {
             let _ = weak.update(cx, |this, cx| {
