@@ -16,14 +16,6 @@ pub enum Frequency {
 }
 
 impl Frequency {
-    pub fn label(self) -> &'static str {
-        match self {
-            Frequency::Daily => "Günlük",
-            Frequency::Weekly => "Haftalık",
-            Frequency::Monthly => "Aylık",
-        }
-    }
-
     pub fn unit(self) -> &'static str {
         match self {
             Frequency::Daily => "gün",
@@ -76,6 +68,11 @@ fn previous_period(date: NaiveDate, frequency: Frequency) -> NaiveDate {
 
 pub fn today() -> NaiveDate {
     Local::now().date_naive()
+}
+
+/// Bugünün hafta günü indeksi: 0 = Pazartesi ... 6 = Pazar
+pub fn weekday_of_today() -> u8 {
+    today().weekday().num_days_from_monday() as u8
 }
 
 /// "Pazartesi, 26 Ekim 2026" gibi Türkçe tarih.
@@ -131,6 +128,33 @@ pub struct RoutineItem {
     pub created_at: NaiveDate,
 }
 
+/// Saat dilimi girişi: "günde hangi saatte ne var"
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleEntry {
+    pub id: String,
+    pub name: String,
+    /// "HH:MM"
+    pub start: String,
+    /// "HH:MM"
+    pub end: String,
+    /// 0 = Pazartesi ... 6 = Pazar
+    pub days: Vec<u8>,
+}
+
+impl ScheduleEntry {
+    /// "HH:MM" parse; geçersizse None.
+    pub fn parse_time(text: &str) -> Option<String> {
+        let text = text.trim();
+        let (h, m) = text.split_once(':')?;
+        let (h, m): (u32, u32) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
+        if h < 24 && m < 60 {
+            Some(format!("{h:02}:{m:02}"))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DashboardData {
     pub habits: Vec<Habit>,
@@ -141,10 +165,14 @@ pub struct DashboardData {
     /// routine item id -> completed dates
     #[serde(default)]
     pub routine_checks: HashMap<String, BTreeSet<NaiveDate>>,
+    /// saat dilimleri
+    #[serde(default)]
+    pub schedule: Vec<ScheduleEntry>,
 }
 
 impl DashboardData {
-    fn storage_path() -> PathBuf {        dirs::data_dir()
+    fn storage_path() -> PathBuf {
+        dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("personal-dashboard")
             .join("data.json")
@@ -168,13 +196,14 @@ impl DashboardData {
     }
 
     fn new_id() -> String {
-        format!("{}_{}", today().format("%Y%m%d"), std::process::id()) + &format!(
-            "_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.subsec_nanos())
-                .unwrap_or(0)
-        )
+        format!("{}_{}", today().format("%Y%m%d"), std::process::id())
+            + &format!(
+                "_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(0)
+            )
     }
 
     // --- Habits ---
@@ -237,7 +266,11 @@ impl DashboardData {
     pub fn today_progress(&self) -> (usize, usize) {
         let mut done = 0;
         let mut total = 0;
-        for habit in self.habits.iter().filter(|h| h.frequency == Frequency::Daily) {
+        for habit in self
+            .habits
+            .iter()
+            .filter(|h| h.frequency == Frequency::Daily)
+        {
             total += 1;
             if self.habit_done(habit, today()) {
                 done += 1;
@@ -252,23 +285,41 @@ impl DashboardData {
         (done, total)
     }
 
-    pub fn period_progress(&self, frequency: Frequency) -> (usize, usize) {
-        let mut done = 0;
-        let mut total = 0;
-        for habit in self
-            .habits
-            .iter()
-            .filter(|h| h.frequency == frequency)
-        {
-            total += 1;
-            if self.habit_done(habit, today()) {
-                done += 1;
-            }
-        }
-        (done, total)
+    // --- Schedule (saatler) ---
+
+    pub fn add_schedule(&mut self, name: String, start: String, end: String, days: Vec<u8>) {
+        self.schedule.push(ScheduleEntry {
+            id: Self::new_id(),
+            name,
+            start,
+            end,
+            days,
+        });
+        self.save();
     }
 
-    // --- Routines ---
+    pub fn remove_schedule(&mut self, id: &str) {
+        self.schedule.retain(|s| s.id != id);
+        self.save();
+    }
+
+    /// Verilen güne (0..=6) denk gelen girişler, saat sırasına dizili.
+    pub fn schedule_for(&self, weekday: u8) -> Vec<ScheduleEntry> {
+        let mut entries: Vec<ScheduleEntry> = self
+            .schedule
+            .iter()
+            .filter(|s| s.days.contains(&weekday))
+            .cloned()
+            .collect();
+        entries.sort_by(|a, b| a.start.cmp(&b.start));
+        entries
+    }
+
+    /// Bugünün programı.
+    pub fn schedule_today(&self) -> Vec<ScheduleEntry> {
+        let weekday = today().weekday().num_days_from_monday() as u8;
+        self.schedule_for(weekday)
+    }
 
     pub fn add_routine(&mut self, name: String) {
         self.routine_items.push(RoutineItem {
@@ -325,10 +376,22 @@ mod tests {
     #[test]
     fn period_keys() {
         // 2026-10-26 Pazartesi
-        assert_eq!(period_key(date(2026, 10, 26), Frequency::Daily), "2026-10-26");
-        assert_eq!(period_key(date(2026, 10, 25), Frequency::Weekly), "2026-10-19");
-        assert_eq!(period_key(date(2026, 10, 31), Frequency::Weekly), "2026-10-26");
-        assert_eq!(period_key(date(2026, 10, 26), Frequency::Monthly), "2026-10");
+        assert_eq!(
+            period_key(date(2026, 10, 26), Frequency::Daily),
+            "2026-10-26"
+        );
+        assert_eq!(
+            period_key(date(2026, 10, 25), Frequency::Weekly),
+            "2026-10-19"
+        );
+        assert_eq!(
+            period_key(date(2026, 10, 31), Frequency::Weekly),
+            "2026-10-26"
+        );
+        assert_eq!(
+            period_key(date(2026, 10, 26), Frequency::Monthly),
+            "2026-10"
+        );
     }
 
     #[test]
@@ -350,10 +413,7 @@ mod tests {
         // dünü de işaretleyelim
         let yesterday = previous_period(today(), Frequency::Daily);
         let key = period_key(yesterday, Frequency::Daily);
-        data.habit_completions
-            .get_mut(&id)
-            .unwrap()
-            .insert(key);
+        data.habit_completions.get_mut(&id).unwrap().insert(key);
         assert_eq!(data.habit_streak(&data.habits[0]), 2);
         data.toggle_habit(&id);
         assert!(!data.habit_done(&data.habits[0], today()));
@@ -379,5 +439,46 @@ mod tests {
         assert!(data.habits.is_empty());
         assert!(data.habit_completions.is_empty());
     }
-}
 
+    fn entry(name: &str, start: &str, end: &str, days: Vec<u8>) -> ScheduleEntry {
+        ScheduleEntry {
+            id: format!("t-{name}"),
+            name: name.into(),
+            start: start.into(),
+            end: end.into(),
+            days,
+        }
+    }
+
+    #[test]
+    fn parse_time() {
+        assert_eq!(ScheduleEntry::parse_time("9:05"), Some("09:05".into()));
+        assert_eq!(ScheduleEntry::parse_time("23:59"), Some("23:59".into()));
+        assert_eq!(ScheduleEntry::parse_time("24:00"), None);
+        assert_eq!(ScheduleEntry::parse_time("12:60"), None);
+        assert_eq!(ScheduleEntry::parse_time("abc"), None);
+    }
+
+    #[test]
+    fn schedule_filter_and_sort() {
+        let mut data = DashboardData::default();
+        // 2026-10-26 Pazartesi (weekday=0)
+        data.schedule = vec![
+            entry("akşam", "19:00", "20:00", vec![0, 3]),
+            entry("sabah", "07:00", "08:00", vec![0]),
+            entry("öğlen", "12:00", "13:00", vec![6]), // sadece pazar
+        ];
+        let today = data.schedule_today();
+        // saat sırasına dizilmiş ve sadece pazartesi olanlar
+        assert_eq!(today.len(), 2);
+        assert_eq!(today[0].name, "sabah");
+        assert_eq!(today[1].name, "akşam");
+
+        // diğer günler (çarşamba = 2) boş
+        assert!(data.schedule_for(2).is_empty());
+        // pazar (3) sadece öğlen
+        assert_eq!(data.schedule_for(6).len(), 1);
+        data.remove_schedule("t-akşam");
+        assert_eq!(data.schedule.len(), 2);
+    }
+}

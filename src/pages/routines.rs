@@ -1,12 +1,12 @@
+use gpui_kit::component::Sizable as _;
 use gpui_kit::component::{
-    ActiveTheme, IconName, button::Button, button::ButtonVariants as _, checkbox::Checkbox,
-    h_flex, input::Input, input::InputState, v_flex,
+    button::Button, button::ButtonVariants as _, checkbox::Checkbox, h_flex, input::Input,
+    input::InputState, v_flex, ActiveTheme, IconName,
 };
 use gpui_kit::{
-    AppContext as _, AnyElement, Context, Div, IntoElement as _, ParentElement as _,
-    SharedString, Styled as _, px, div,
+    div, px, AnyElement, AppContext as _, Context, Div, IntoElement as _, ParentElement as _,
+    SharedString, Styled as _,
 };
-use gpui_kit::component::Sizable as _;
 
 use super::{card, section_title};
 use crate::app::DashboardView;
@@ -22,29 +22,31 @@ pub fn routines_page(
         .w_full()
         .max_w(px(820.))
         .child(section_title("Günlük rutinler"))
-        .child(card(cx).gap_3().child(
-            h_flex()
-                .items_center()
-                .gap_2()
-                .child(Input::new(&view.routine_input).flex_1().cleanable(true))
-                .child(
-                    Button::new("add-routine")
-                        .primary()
-                        .icon(IconName::Plus)
-                        .label("Ekle")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            let name = this.routine_input.read(cx).value().trim().to_string();
-                            if name.is_empty() {
-                                return;
-                            }
-                            cx.global_mut::<DashboardData>().add_routine(name);
-                            this.routine_input = cx.new(|cx| {
-                                InputState::new(window, cx).placeholder("Yeni rutin ekle...")
-                            });
-                            cx.notify();
-                        })),
-                ),
-        ))
+        .child(
+            card(cx).gap_3().child(
+                h_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(Input::new(&view.routine_input).flex_1().cleanable(true))
+                    .child(
+                        Button::new("add-routine")
+                            .primary()
+                            .icon(IconName::Plus)
+                            .label("Ekle")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                let name = this.routine_input.read(cx).value().trim().to_string();
+                                if name.is_empty() {
+                                    return;
+                                }
+                                cx.global_mut::<DashboardData>().add_routine(name);
+                                this.routine_input = cx.new(|cx| {
+                                    InputState::new(window, cx).placeholder("Yeni rutin ekle...")
+                                });
+                                cx.notify();
+                            })),
+                    ),
+            ),
+        )
         .child(list_card(cx))
         .into_any_element()
 }
@@ -63,7 +65,9 @@ fn list_card(cx: &mut Context<DashboardView>) -> Div {
     let items = cx.global::<DashboardData>().routine_items.clone();
     let mut card = card(cx);
     for item in &items {
-        let checked = cx.global::<DashboardData>().routine_done(&item.id, data::today());
+        let checked = cx
+            .global::<DashboardData>()
+            .routine_done(&item.id, data::today());
         let id = item.id.clone();
         let id2 = id.clone();
         card = card.child(

@@ -1,17 +1,18 @@
-use gpui_kit::component::{
-    ActiveTheme, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex, input::Input,
-    input::InputState,
-    radio::RadioGroup,
-    v_flex,
-};
-use gpui_kit::{
-    AppContext as _, AnyElement, Context, Div, IntoElement as _, ParentElement as _, Styled as _,
-    div,
-};
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::Sizable as _;
+use gpui_kit::component::{
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    input::Input,
+    input::InputState,
+    radio::RadioGroup,
+    v_flex, ActiveTheme, IconName,
+};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    div, AnyElement, AppContext as _, Context, Div, IntoElement as _, ParentElement as _,
+    Styled as _,
+};
 
 use super::{card, section_title};
 use crate::app::DashboardView;
@@ -41,11 +42,7 @@ fn add_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
         h_flex()
             .items_center()
             .gap_2()
-            .child(
-                Input::new(&view.habit_input)
-                    .flex_1()
-                    .cleanable(true),
-            )
+            .child(Input::new(&view.habit_input).flex_1().cleanable(true))
             .child(
                 RadioGroup::new("new-habit-freq")
                     .children(["Günlük", "Haftalık", "Aylık"])
@@ -61,12 +58,7 @@ fn add_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
                     .icon(IconName::Plus)
                     .label("Ekle")
                     .on_click(cx.listener(|this, _, window, cx| {
-                        let name = this
-                            .habit_input
-                            .read(cx)
-                            .value()
-                            .trim()
-                            .to_string();
+                        let name = this.habit_input.read(cx).value().trim().to_string();
                         if name.is_empty() {
                             return;
                         }
@@ -101,6 +93,8 @@ fn habit_group(
         }
         let streak = data.habit_streak(habit);
         let id = habit.id.clone();
+        let id2 = id.clone();
+        let done = data.habit_done(habit, crate::data::today());
         card = card.child(
             h_flex()
                 .justify_between()
@@ -122,12 +116,22 @@ fn habit_group(
                                 }),
                         )
                         .child(
+                            Button::new(format!("toggle-habit-{}", habit.id))
+                                .small()
+                                .when(done, |b| b.primary())
+                                .label(if done { "Yapıldı" } else { "Yap" })
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    cx.global_mut::<DashboardData>().toggle_habit(&id);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
                             Button::new(format!("remove-habit-{}", habit.id))
                                 .small()
                                 .ghost()
                                 .icon(IconName::Close)
                                 .on_click(cx.listener(move |_, _, _, cx| {
-                                    cx.global_mut::<DashboardData>().remove_habit(&id);
+                                    cx.global_mut::<DashboardData>().remove_habit(&id2);
                                     cx.notify();
                                 })),
                         ),
