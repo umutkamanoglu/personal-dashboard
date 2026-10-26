@@ -166,6 +166,45 @@ fn routines_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_
     card
 }
 
+fn notes_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let reminders = data.reminders_today();
+    let mut card = card(cx).gap_2();
+    card = card.child(card_row("Notlar & hatırlatıcılar", Page::Notes, cx));
+
+    let mut body = v_flex().gap_1();
+    if !reminders.is_empty() {
+        body = body.children(reminders.iter().map(|r| {
+            h_flex()
+                .gap_2()
+                .items_center()
+                .py_1()
+                .child(div().text_color(cx.theme().primary).child(IconName::Bell))
+                .child(r.text.clone())
+        }));
+    }
+    let note_text = if data.notes.is_empty() {
+        "Not yok.".to_string()
+    } else {
+        format!("{} not", data.notes.len())
+    };
+    if reminders.is_empty() {
+        body = body.child(
+            div()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .py_2()
+                .child("Bugün hatırlatıcı yok."),
+        );
+    }
+    body = body.child(
+        div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(note_text),
+    );
+    card.child(body)
+}
+
 pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
     let data: DashboardData = cx.global::<DashboardData>().clone();
 
@@ -197,7 +236,8 @@ pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
                 .child(clock_card(cx).w(px(220.)))
                 .child(schedule_card(&data, cx).w(px(320.)))
                 .child(habits_card(&data, cx).w(px(320.)))
-                .child(routines_card(&data, cx).w(px(320.))),
+                .child(routines_card(&data, cx).w(px(320.)))
+                .child(notes_card(&data, cx).w(px(320.))),
         )
         .into_any_element()
 }

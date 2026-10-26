@@ -22,6 +22,7 @@ pub enum Page {
     Habits,
     Routines,
     Stats,
+    Notes,
 }
 
 impl Page {
@@ -32,15 +33,17 @@ impl Page {
             Page::Habits => "Alışkanlıklar",
             Page::Routines => "Rutinler",
             Page::Stats => "İstatistik",
+            Page::Notes => "Notlar",
         }
     }
 
-    const ALL: [Page; 5] = [
+    const ALL: [Page; 6] = [
         Page::Home,
         Page::Schedule,
         Page::Habits,
         Page::Routines,
         Page::Stats,
+        Page::Notes,
     ];
 
     fn icon(self) -> IconName {
@@ -50,6 +53,7 @@ impl Page {
             Page::Habits => IconName::CircleCheck,
             Page::Routines => IconName::RefreshCw,
             Page::Stats => IconName::ChartPie,
+            Page::Notes => IconName::FileText,
         }
     }
 }
@@ -67,6 +71,10 @@ pub struct DashboardView {
     pub(crate) new_habit_freq: usize,
     // Rutin formu
     pub(crate) routine_input: Entity<InputState>,
+    // Not / hatırlatıcı formu
+    pub(crate) note_input: Entity<InputState>,
+    pub(crate) remind_input: Entity<InputState>,
+    pub(crate) remind_days: [bool; 7],
 }
 
 impl DashboardView {
@@ -78,6 +86,9 @@ impl DashboardView {
 
         let habit_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Yeni alışkanlık ekle..."));
+        let note_input = cx.new(|cx| InputState::new(window, cx).placeholder("Yeni not..."));
+        let remind_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Hatırlatıcı (ör. çöp çıkar)"));
         let routine_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Yeni rutin ekle..."));
 
@@ -104,6 +115,9 @@ impl DashboardView {
             habit_input,
             new_habit_freq: 0,
             routine_input,
+            note_input,
+            remind_input,
+            remind_days: [false; 7],
         }
     }
 
@@ -209,6 +223,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Habits => pages::habits_page(self, window, cx),
             Page::Routines => pages::routines_page(self, window, cx),
             Page::Stats => pages::stats_page(self, cx),
+            Page::Notes => pages::notes_page(self, cx),
         };
 
         v_flex()

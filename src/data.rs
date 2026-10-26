@@ -128,6 +128,22 @@ pub struct RoutineItem {
     pub created_at: NaiveDate,
 }
 
+/// Serbest not.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Note {
+    pub id: String,
+    pub text: String,
+    pub created_at: NaiveDate,
+}
+
+/// Haftanın seçili günlerinde hatırlatılan not ("0 = Pzt ... 6 = Paz").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reminder {
+    pub id: String,
+    pub text: String,
+    pub days: Vec<u8>,
+}
+
 /// Saat dilimi girişi: "günde hangi saatte ne var"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleEntry {
@@ -168,6 +184,12 @@ pub struct DashboardData {
     /// saat dilimleri
     #[serde(default)]
     pub schedule: Vec<ScheduleEntry>,
+    /// notlar
+    #[serde(default)]
+    pub notes: Vec<Note>,
+    /// hatırlatıcılar
+    #[serde(default)]
+    pub reminders: Vec<Reminder>,
     /// koyu tema mı (kaydedilir, açık tema varsayılan)
     #[serde(default)]
     pub dark_mode: bool,
@@ -301,6 +323,45 @@ impl DashboardData {
         };
         let cutoff = today() - Duration::days(days as i64);
         set.range(cutoff..).count() as u32
+    }
+
+    // --- Notlar & hatırlatıcılar ---
+
+    pub fn add_note(&mut self, text: String) {
+        self.notes.push(Note {
+            id: Self::new_id(),
+            text,
+            created_at: today(),
+        });
+        self.save();
+    }
+
+    pub fn remove_note(&mut self, id: &str) {
+        self.notes.retain(|n| n.id != id);
+        self.save();
+    }
+
+    pub fn add_reminder(&mut self, text: String, days: Vec<u8>) {
+        self.reminders.push(Reminder {
+            id: Self::new_id(),
+            text,
+            days,
+        });
+        self.save();
+    }
+
+    pub fn remove_reminder(&mut self, id: &str) {
+        self.reminders.retain(|r| r.id != id);
+        self.save();
+    }
+
+    /// Bugün hatırlatılacak olanlar.
+    pub fn reminders_today(&self) -> Vec<&Reminder> {
+        let wd = weekday_of_today();
+        self.reminders
+            .iter()
+            .filter(|r| r.days.contains(&wd))
+            .collect()
     }
 
     /// Alışkanlığın son `periods` dönemdeki durumları: (dönem başı tarihi, yapıldı mı).
@@ -524,6 +585,25 @@ mod tests {
         assert_eq!(ScheduleEntry::parse_time("24:00"), None);
         assert_eq!(ScheduleEntry::parse_time("12:60"), None);
         assert_eq!(ScheduleEntry::parse_time("abc"), None);
+    }
+
+    #[test]
+    fn reminders_and_notes() {
+        let mut data = DashboardData::default();
+        data.add_note("market listesi".into());
+        data.add_reminder("çöp çıkar".into(), vec![0, 3]);
+        data.add_reminder("araba yıka".into(), vec![6]);
+        // bugün pazartesi (0): çöp çıkar hatırlatılır, araba değil
+        let today = data.reminders_today();
+        assert_eq!(today.len(), 1);
+        assert_eq!(today[0].text, "çöp çıkar");
+
+        let note_id = data.notes[0].id.clone();
+        data.remove_note(&note_id);
+        assert!(data.notes.is_empty());
+        let r_id = data.reminders[0].id.clone();
+        data.remove_reminder(&r_id);
+        assert_eq!(data.reminders.len(), 1);
     }
 
     #[test]
