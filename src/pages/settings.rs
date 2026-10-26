@@ -7,8 +7,8 @@ use gpui_kit::component::{
     v_flex, ActiveTheme, IconName, Sizable as _,
 };
 use gpui_kit::{
-    div, px, AnyElement, Context, Div, IntoElement as _, ParentElement as _, SharedString,
-    Styled as _,
+    div, px, AnyElement, Context, Div, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
 };
 
 use super::card;
@@ -133,33 +133,47 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
             )
     }));
 
-    // koleksiyondan eklenebilir kartlar
+    // koleksiyondan eklenebilir kartlar: canlı önizleme, tıkla-ekle
     let available = data.home_cards_available();
     if !available.is_empty() {
         card = card.child(
             div()
+                .mt_2()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child("Eklenebilir kartlar:"),
+                .child("Eklenebilir kartlar (eklemek için kartın üzerine tıkla):"),
         );
-        card = card.child(
-            h_flex()
-                .gap_2()
-                .flex_wrap()
-                .children(available.iter().map(|key| {
-                    Button::new(SharedString::from(format!("home-add-{}", key)))
-                        .xsmall()
-                        .ghost()
-                        .label(format!("+ {}", card_label(key)))
-                        .on_click(cx.listener({
-                            let key = key.to_string();
-                            move |_, _, _, cx| {
-                                cx.global_mut::<DashboardData>().add_home_card(&key);
-                                cx.notify();
-                            }
-                        }))
-                })),
-        );
+        let weak = cx.entity().downgrade();
+        card = card.child(h_flex().gap_3().flex_wrap().items_start().children(
+            available.into_iter().map(|key| {
+                let key_str = key.to_string();
+                let weak = weak.clone();
+                h_flex()
+                    .gap_1()
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("home-add-{}", key)))
+                            .cursor_pointer()
+                            .w(px(300.))
+                            .max_w(px(300.))
+                            .flex()
+                            .items_stretch()
+                            .child(crate::pages::card_body(key, &data, cx).h_full())
+                            .on_click(move |_, _, cx| {
+                                let _ = weak.update(cx, |_, cx| {
+                                    cx.global_mut::<DashboardData>().add_home_card(key);
+                                    cx.notify();
+                                });
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!("+ {} ekle", card_label(&key_str))),
+                    )
+            }),
+        ));
     }
 
     card.child(

@@ -5,16 +5,24 @@
 //! seyrek güncellenir.
 
 use nvml_wrapper::Nvml;
-use sysinfo::{Components, Disks, System};
+use std::time::Instant;
+use sysinfo::{Components, Disks, Networks, System};
 
 #[derive(Debug, Default)]
 pub struct HardwareInfo {
     pub sys: System,
     pub components: Components,
     pub disks: Disks,
+    pub networks: Networks,
     pub nvml: Option<Nvml>,
     pub tick: u32,
     pub nvml_error: Option<String>,
+    /// ağ hızı ölçümü için son refresh zamanı
+    pub net_last: Option<Instant>,
+    /// ölçülen indirme hızları: interface -> bayt/sn
+    pub net_rx_speed: Vec<(String, f32)>,
+    /// ölçülen yükleme hızları: interface -> bayt/sn
+    pub net_tx_speed: Vec<(String, f32)>,
 }
 
 impl gpui_kit::Global for HardwareInfo {}
@@ -27,6 +35,8 @@ impl HardwareInfo {
         // komponent ve disk listeleri başta bir kez kurulur
         let components = Components::new_with_refreshed_list();
         let disks = Disks::new_with_refreshed_list();
+        let mut networks = Networks::new_with_refreshed_list();
+        networks.refresh(true);
 
         let (nvml, nvml_error) = match Nvml::init() {
             Ok(nvml) => (Some(nvml), None),
@@ -37,9 +47,13 @@ impl HardwareInfo {
             sys,
             components,
             disks,
+            networks,
             nvml,
             tick: 0,
             nvml_error,
+            net_last: None,
+            net_rx_speed: Vec::new(),
+            net_tx_speed: Vec::new(),
         }
     }
 
@@ -54,6 +68,54 @@ impl HardwareInfo {
         if self.tick.is_multiple_of(60) {
             self.disks.refresh(true);
         }
+        self.refresh_network();
+    }
+
+    /// Ağ: refresh + geçen süreye göre indirme/yükleme hızlarını ölçer.
+    fn refresh_network(&mut self) {
+        self.networks.refresh(true);
+        let dt = match self.net_last {
+            Some(last) => last.elapsed().as_secs_f32(),
+            None => 0.,
+        };
+        self.net_last = Some(Instant::now());
+
+        if dt <= 0. {
+            return;
+        }
+        self.net_rx_speed = self
+            .networks
+            .list()
+            .iter()
+            .map(|(name, d)| (name.clone(), d.received() as f32 / dt))
+            .collect();
+        self.net_tx_speed = self
+            .networks
+            .list()
+            .iter()
+            .map(|(name, d)| (name.clone(), d.transmitted() as f32 / dt))
+            .collect();
+    }
+
+    /// Toplam (indirme hızına göre) bayt/sn.
+    pub fn net_download_speed_bps(&self) -> f32 {
+        self.net_rx_speed.iter().map(|(_, v)| *v).sum()
+    }
+
+    /// Toplam yükleme hızı bayt/sn.
+    pub fn net_upload_speed_bps(&self) -> f32 {
+        self.net_tx_speed.iter().map(|(_, v)| *v).sum()
+    }
+
+    /// Açılımdan bu yana toplam indirilen/yüklenen bayt.
+    pub fn net_total(&self) -> (u64, u64) {
+        let mut rx = 0u64;
+        let mut tx = 0u64;
+        for d in self.networks.list().values() {
+            rx += d.total_received();
+            tx += d.total_transmitted();
+        }
+        (rx, tx)
     }
 
     // --- CPU ---

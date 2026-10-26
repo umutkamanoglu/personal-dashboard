@@ -264,29 +264,35 @@ impl DashboardView {
             }
         }
 
-        // sıkıştırma düğmesi: menü başında sola/dikeyde üstte
-        let weak = cx.entity().downgrade();
-        let toggle_btn = div()
-            .id("sidebar-collapse-toggle")
-            .cursor_pointer()
-            .flex()
-            .items_center()
-            .justify_center()
-            .size_7()
-            .rounded_sm()
-            .text_color(cx.theme().muted_foreground)
-            .hover(|s| s.bg(cx.theme().accent.opacity(0.5)))
-            .child(if collapsed {
-                IconName::PanelLeftOpen
-            } else {
-                IconName::PanelLeftClose
-            })
-            .on_click(move |_, _, cx| {
-                let _ = weak.update(cx, |this, cx| {
-                    this.sidebar_collapsed = !this.sidebar_collapsed;
-                    cx.notify();
-                });
-            });
+        // sıkıştırma düğmesi: menü başında; Stateful<Div> klonlanamadığından
+        // collapsed/expanded dalları için ayrı örnek üreten yardımcı yapı
+        macro_rules! toggle_btn {
+            ($icon:expr) => {{
+                let weak = cx.entity().downgrade();
+                let id = if matches!($icon, IconName::PanelLeftOpen) {
+                    "sb-collapse"
+                } else {
+                    "sb-expand"
+                };
+                div()
+                    .id(SharedString::from(id))
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size_7()
+                    .rounded_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .hover(|s| s.bg(cx.theme().accent.opacity(0.5)))
+                    .child($icon)
+                    .on_click(move |_, _, cx| {
+                        let _ = weak.update(cx, |this, cx| {
+                            this.sidebar_collapsed = !this.sidebar_collapsed;
+                            cx.notify();
+                        });
+                    })
+            }};
+        }
 
         v_flex()
             .w(if collapsed { px(64.) } else { px(232.) })
@@ -296,26 +302,49 @@ impl DashboardView {
             .gap_1()
             .border_r_1()
             .border_color(cx.theme().border)
-            .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .px_1()
-                    .pb_3()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .size_8()
-                            .flex_shrink_0()
-                            .rounded(cx.theme().radius)
-                            .bg(cx.theme().primary)
-                            .text_color(cx.theme().primary_foreground)
-                            .child(IconName::LayoutDashboard),
-                    )
-                    .when(!collapsed, |row| {
-                        row.child(
+            .when(collapsed, |col| {
+                // dar modda üstte sadece ortalanmış logo + düğme
+                col.child(
+                    v_flex()
+                        .w_full()
+                        .items_center()
+                        .gap_2()
+                        .pb_3()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size_8()
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().primary)
+                                .text_color(cx.theme().primary_foreground)
+                                .child(IconName::LayoutDashboard),
+                        )
+                        .child(toggle_btn!(IconName::PanelLeftOpen)),
+                )
+            })
+            .when(!collapsed, |this| {
+                this.child(
+                    h_flex()
+                        .w_full()
+                        .gap_2()
+                        .items_center()
+                        .px_1()
+                        .pb_3()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size_8()
+                                .flex_shrink_0()
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().primary)
+                                .text_color(cx.theme().primary_foreground)
+                                .child(IconName::LayoutDashboard),
+                        )
+                        .child(
                             v_flex()
                                 .min_w_0()
                                 .overflow_hidden()
@@ -328,9 +357,9 @@ impl DashboardView {
                                         .child("alışkanlık takibi"),
                                 ),
                         )
-                    })
-                    .child(toggle_btn),
-            )
+                        .child(toggle_btn!(IconName::PanelLeftClose)),
+                )
+            })
             .children(items)
             .child(
                 h_flex()
@@ -421,7 +450,7 @@ impl gpui_kit::Render for DashboardView {
                         .min_w_0()
                         .h_full()
                         .overflow_y_scrollbar()
-                        .child(div().p_6().child(content)),
+                        .child(div().p_6().flex().justify_center().child(content)),
                 ),
             )
     }

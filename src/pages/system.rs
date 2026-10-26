@@ -1,5 +1,6 @@
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{button::Button, h_flex, v_flex, ActiveTheme, IconName, Sizable as _};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, Context, Div, IntoElement as _, ParentElement as _, Styled as _,
 };
@@ -39,6 +40,7 @@ pub fn system_page(_view: &DashboardView, cx: &mut Context<DashboardView>) -> An
         .child(disks_card(cx))
         .child(general_card(cx))
         .child(temps_card(cx))
+        .child(network_card(cx))
         .into_any_element()
 }
 
@@ -328,4 +330,92 @@ fn general_card(cx: &mut Context<DashboardView>) -> Div {
         .child(stat_row("Çekirdek", info.kernel_version(), cx))
         .child(stat_row("Makine adı", info.host_name(), cx))
         .child(stat_row("Açık kalma", info.uptime_str(), cx))
+}
+
+// --- Ağ ---
+
+fn net_speed_str(bps: f32) -> String {
+    if bps >= 1024. * 1024. * 1024. {
+        format!("{:.2} GB/s", bps / 1024. / 1024. / 1024.)
+    } else if bps >= 1024. * 1024. {
+        format!("{:.1} MB/s", bps / 1024. / 1024.)
+    } else if bps >= 1024. {
+        format!("{:.0} KB/s", bps / 1024.)
+    } else {
+        format!("{:.0} B/s", bps)
+    }
+}
+
+fn net_total_str(b: u64) -> String {
+    let b = b as f32;
+    if b >= 1024. * 1024. * 1024. {
+        format!("{:.2} GB", b / 1024. / 1024. / 1024.)
+    } else if b >= 1024. * 1024. {
+        format!("{:.1} MB", b / 1024. / 1024.)
+    } else {
+        format!("{:.0} KB", b / 1024.)
+    }
+}
+
+fn network_card(cx: &mut Context<DashboardView>) -> Div {
+    let info = cx.global::<HardwareInfo>();
+    let rx = info.net_download_speed_bps();
+    let tx = info.net_upload_speed_bps();
+    let (total_rx, total_tx) = info.net_total();
+    let interfaces: Vec<(String, f32, f32)> = info
+        .net_rx_speed
+        .iter()
+        .zip(info.net_tx_speed.iter())
+        .map(|((n, r), (_, t))| (n.clone(), *r, *t))
+        .collect();
+
+    card(cx)
+        .gap_3()
+        .child(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(IconName::Network)
+                .child(div().font_medium().child("Ağ")),
+        )
+        .child(stat_row("İndirme (şimdi)", net_speed_str(rx), cx))
+        .child(stat_row("Yükleme (şimdi)", net_speed_str(tx), cx))
+        .child(stat_row(
+            "Oturum toplamı",
+            format!(
+                "↓ {} · ↑ {}",
+                net_total_str(total_rx),
+                net_total_str(total_tx)
+            ),
+            cx,
+        ))
+        .when(!interfaces.is_empty(), |c| {
+            c.child(
+                div()
+                    .mt_1()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Arayüzler"),
+            )
+            .children(interfaces.into_iter().map(|(name, r, t)| {
+                v_flex()
+                    .py_1()
+                    .child(div().text_sm().font_medium().child(name))
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("↓ in / ↑ out"),
+                            )
+                            .child(div().text_sm().font_medium().child(format!(
+                                "{} · {}",
+                                net_speed_str(r),
+                                net_speed_str(t)
+                            ))),
+                    )
+            }))
+        })
 }

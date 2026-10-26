@@ -268,7 +268,11 @@ fn home_key_page(key: &str) -> Page {
 }
 
 /// Kart koleksiyonu: anahtar -> içeriği üreten fonksiyon.
-fn card_body(key: &str, data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+pub fn card_body(
+    key: &str,
+    data: &DashboardData,
+    cx: &mut Context<DashboardView>,
+) -> gpui_kit::Div {
     match key {
         "schedule" => schedule_card(data, cx),
         "habits" => habits_card(data, cx),
@@ -282,6 +286,7 @@ fn card_body(key: &str, data: &DashboardData, cx: &mut Context<DashboardView>) -
         "disks" => disks_home_card(cx),
         "temps" => temps_home_card(cx),
         "general" => general_home_card(cx),
+        "network" => network_home_card(cx),
         _ => notes_card(data, cx),
     }
 }
@@ -625,5 +630,82 @@ fn general_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(format!("{} · {} açık kalma", host, uptime)),
+        )
+}
+
+/// Bayt/sn -> okunabilir hız (KB/s, MB/s, GB/s).
+fn net_speed_str(bps: f32) -> String {
+    if bps >= 1024. * 1024. * 1024. {
+        format!("{:.2} GB/s", bps / 1024. / 1024. / 1024.)
+    } else if bps >= 1024. * 1024. {
+        format!("{:.1} MB/s", bps / 1024. / 1024.)
+    } else if bps >= 1024. {
+        format!("{:.0} KB/s", bps / 1024.)
+    } else {
+        format!("{:.0} B/s", bps)
+    }
+}
+
+/// Bayt -> okunabilir toplam (KB, MB, GB).
+fn net_total_str(b: u64) -> String {
+    let b = b as f32;
+    if b >= 1024. * 1024. * 1024. {
+        format!("{:.2} GB", b / 1024. / 1024. / 1024.)
+    } else if b >= 1024. * 1024. {
+        format!("{:.1} MB", b / 1024. / 1024.)
+    } else {
+        format!("{:.0} KB", b / 1024.)
+    }
+}
+
+/// Ağ özeti: indirme/yükleme hızları + açılımdan bu yana toplam.
+fn network_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let (rx, tx, (total_rx, total_tx)) = {
+        let info = cx.global::<HardwareInfo>();
+        (
+            info.net_download_speed_bps(),
+            info.net_upload_speed_bps(),
+            info.net_total(),
+        )
+    };
+    card(cx)
+        .gap_2()
+        .child(card_row("Ağ", Page::System, cx))
+        .child(
+            h_flex()
+                .gap_4()
+                .items_center()
+                .child(
+                    h_flex()
+                        .gap_1()
+                        .items_center()
+                        .child(
+                            div()
+                                .text_color(cx.theme().primary)
+                                .child(IconName::ArrowDown),
+                        )
+                        .child(div().text_sm().font_medium().child(net_speed_str(rx))),
+                )
+                .child(
+                    h_flex()
+                        .gap_1()
+                        .items_center()
+                        .child(
+                            div()
+                                .text_color(cx.theme().success)
+                                .child(IconName::ArrowUp),
+                        )
+                        .child(div().text_sm().font_medium().child(net_speed_str(tx))),
+                ),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(format!(
+                    "oturum: ↓ {} · ↑ {}",
+                    net_total_str(total_rx),
+                    net_total_str(total_tx)
+                )),
         )
 }

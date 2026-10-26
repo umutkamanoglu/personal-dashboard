@@ -234,9 +234,9 @@ pub struct DashboardData {
 }
 
 /// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
-pub const HOME_CARD_KEYS: [&str; 12] = [
+pub const HOME_CARD_KEYS: [&str; 13] = [
     "schedule", "habits", "routines", "notes", "pomodoro", "system", "cpu", "ram", "gpu", "disks",
-    "temps", "general",
+    "temps", "general", "network",
 ];
 
 fn default_home_order() -> Vec<String> {

@@ -13,8 +13,9 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 - **Tema:** sağ üstteki düğmeyle açık/koyu tema geçişi (tercih kaydedilir)
 - **Pomodoro:** 15/25/50 dk odak + 5 dk otomatik mola, saniyelik geri sayım, ani geçiş ve tur sayısı
 - **Notlar & hatırlatıcılar:** serbest notlar ve haftanın günlerine atanan hatırlatıcılar; bugün olanlar anasayfada zil ikonuyla listelenir
-- **Sistem bilgisi:** CPU (model/frekans/çekirdek başına kullanım/sıcaklık), RAM, GPU (NVML üzerinden NVIDIA; kullanım/VRAM/Güç/fan), disk dolulukları, tüm sıcaklık sensörleri ve genel bilgisayar bilgileri — anasayfada özet kartı da var
+- **Sistem bilgisi:** CPU (model/frekans/çekirdek başına kullanım/sıcaklık), RAM, GPU (NVML üzerinden NVIDIA; kullanım/VRAM/Güç/fan), disk dolulukları, tüm sıcaklık sensörleri, **ağ (anlık indirme/yükleme hızları + oturum toplamı)** ve genel bilgisayar bilgileri — anasayfada özet kartı da var
 - **Menü:** gruplu, tıklayınca açılan/kapanan alt menüler; başındaki düğmeyle simge moduna sıkıştırılabilir
+- **Ana içerik** geniş ekranda ortalanır, sağda boşluk kalmaz
 - **Kalıcı veri:** veriler `%APPDATA%\personal-dashboard\data.json` içinde JSON olarak saklanır
 
 ## Geliştirme
