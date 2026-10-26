@@ -15,6 +15,7 @@ use gpui_kit::{
 
 use crate::data;
 use crate::hardware::HardwareInfo;
+use crate::media;
 use crate::pages;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,11 +124,17 @@ impl DashboardView {
                 .timer(std::time::Duration::from_secs(1))
                 .await;
             if let Some(this) = this.upgrade() {
+                // medya yoklaması WinRT bloklu çağrılar içerir; arka planda çalışır
+                let media_state = cx
+                    .background_executor()
+                    .spawn(async { media::poll() })
+                    .await;
                 this.update(cx, |_, cx| {
                     // pomodoro fazı dolduysa otomatik geçir
                     cx.global_mut::<data::DashboardData>().advance_pomodoro();
                     // donanım: CPU/RAM her saniye, sıcaklıklar seyrek (hardware içinden)
                     cx.global_mut::<HardwareInfo>().refresh_light();
+                    *cx.global_mut::<media::MediaState>() = media_state;
                     cx.notify()
                 });
             } else {

@@ -28,7 +28,7 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .into_any_element()
 }
 
-const CARD_LABELS: [(&str, &str); 12] = [
+const CARD_LABELS: [(&str, &str); 14] = [
     ("schedule", "Bugünün programı"),
     ("habits", "Alışkanlıklar"),
     ("routines", "Rutinler"),
@@ -41,6 +41,8 @@ const CARD_LABELS: [(&str, &str); 12] = [
     ("disks", "Diskler"),
     ("temps", "Sıcaklıklar"),
     ("general", "Bilgisayar"),
+    ("network", "Ağ"),
+    ("media", "Medya"),
 ];
 
 fn card_label(key: &str) -> &'static str {
@@ -63,7 +65,7 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
     // sıradaki kartlar: genişlik + sıra + çıkar
     card = card.children(data.home_order.iter().map(|key| {
         let key = key.clone();
-        let wide = data.home_card_span(&key) == 2;
+        let span = data.home_card_span(&key);
         h_flex()
             .gap_2()
             .items_center()
@@ -85,20 +87,32 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
             .child(div().flex_1().text_sm().child(format!(
                 "{}{}",
                 card_label(&key),
-                if wide { " (geniş)" } else { "" }
+                match span {
+                    2 => " (2 sütun)",
+                    3 => " (tam satır)",
+                    _ => "",
+                }
             )))
             .child(
                 Button::new(SharedString::from(format!("home-span-{}", key)))
                     .xsmall()
                     .ghost()
-                    .label(if wide { "2 sütun" } else { "1 sütun" })
+                    .label(match span {
+                        2 => "2 sütun",
+                        3 => "3 sütun",
+                        _ => "1 sütun",
+                    })
                     .tooltip("Genişliği değiştir")
                     .on_click(cx.listener({
                         let key = key.clone();
                         move |_, _, _, cx| {
                             let span = cx.global::<DashboardData>().home_card_span(&key);
-                            cx.global_mut::<DashboardData>()
-                                .set_home_span(&key, if span == 2 { 1 } else { 2 });
+                            let next = match span {
+                                1 => 2,
+                                2 => 3,
+                                _ => 1,
+                            };
+                            cx.global_mut::<DashboardData>().set_home_span(&key, next);
                             cx.notify();
                         }
                     })),

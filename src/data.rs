@@ -234,9 +234,9 @@ pub struct DashboardData {
 }
 
 /// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
-pub const HOME_CARD_KEYS: [&str; 13] = [
+pub const HOME_CARD_KEYS: [&str; 14] = [
     "schedule", "habits", "routines", "notes", "pomodoro", "system", "cpu", "ram", "gpu", "disks",
-    "temps", "general", "network",
+    "temps", "general", "network", "media",
 ];
 
 fn default_home_order() -> Vec<String> {
@@ -270,7 +270,7 @@ impl DashboardData {
         self.home_spans
             .get(key)
             .copied()
-            .filter(|s| *s == 1 || *s == 2)
+            .filter(|s| (1..=3).contains(s))
             .unwrap_or(1)
     }
 
@@ -293,7 +293,7 @@ impl DashboardData {
     }
 
     pub fn set_home_span(&mut self, key: &str, span: u8) {
-        let span = if span == 2 { 2 } else { 1 };
+        let span = if (1..=3).contains(&span) { span } else { 1 };
         if self.home_card_span(key) != span {
             if span == 1 {
                 self.home_spans.remove(key);

@@ -4,17 +4,20 @@ use gpui_kit::component::{
     checkbox::Checkbox,
     h_flex, v_flex, ActiveTheme, IconName, Sizable as _,
 };
+use gpui_kit::img;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _,
+    div, px, AnyElement, Context, ImageSource, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
 };
 
 use super::{card, progress_bar};
 use crate::app::{DashboardView, Page};
 use crate::data::{self, DashboardData, PomodoroPhase};
 use crate::hardware::HardwareInfo;
+use crate::media::{self, MediaCmd, MediaState};
 use chrono::Local;
+use std::sync::Arc;
 
 fn header_button(page: Page, cx: &mut Context<DashboardView>) -> Button {
     let weak = cx.entity().downgrade();
@@ -246,8 +249,8 @@ pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
                         .children(row.iter().map(|key| {
                             let page = home_key_page(key);
                             let body = card_body(key, &data, cx);
-                            let wide = data.home_card_span(key) == 2;
-                            clickable(body, page, wide, cx)
+                            let span = data.home_card_span(key);
+                            clickable(body, page, span, cx)
                         }))
                 }),
             ),
@@ -287,31 +290,24 @@ pub fn card_body(
         "temps" => temps_home_card(cx),
         "general" => general_home_card(cx),
         "network" => network_home_card(cx),
+        "media" => media_home_card(cx),
         _ => notes_card(data, cx),
     }
 }
 
-/// Kartları genişliklerine göre satırlara paketler (2 sütun genişlik).
-/// span=2 → tam satır; span=1 → 2'ser yan yana (tek kalırsa tek sütun).
+/// Kartları genişliklerine göre satırlara paketler (3 sütun genişlik).
+/// span=3 → tam satır; diğeri sıkıştırıldığında satırda yeri kalıyor.
 fn pack_rows(cards: Vec<(&str, u8)>) -> Vec<Vec<&str>> {
     let mut rows: Vec<Vec<&str>> = Vec::new();
     let mut cur: Vec<&str> = Vec::new();
     let mut width = 0u8;
     for (key, span) in cards {
-        if span == 2 {
-            if width > 0 {
-                rows.push(std::mem::take(&mut cur));
-                width = 0;
-            }
-            rows.push(vec![key]);
-        } else {
-            if width + 1 > 2 {
-                rows.push(std::mem::take(&mut cur));
-                width = 0;
-            }
-            cur.push(key);
-            width += 1;
+        if width + span > 3 {
+            rows.push(std::mem::take(&mut cur));
+            width = 0;
         }
+        cur.push(key);
+        width += span;
     }
     if !cur.is_empty() {
         rows.push(cur);
@@ -319,12 +315,13 @@ fn pack_rows(cards: Vec<(&str, u8)>) -> Vec<Vec<&str>> {
     rows
 }
 
-/// Tam kartı tıklanabilir yapar. `wide` = 2 sütun genişlik.
-/// İç kart `h_full` ile satırdaki en uzun karta eşit yükseklikte uzar.
+/// Tam kartı tıklanabilir yapar. `span`: 3 = tam satır, 2 = iki sütun,
+/// 1 = tek sütun. İç kart `h_full` ile satırdaki en uzun karta eşit
+/// yükseklikte uzar.
 fn clickable(
     inner: gpui_kit::Div,
     page: Page,
-    wide: bool,
+    span: u8,
     cx: &mut Context<DashboardView>,
 ) -> gpui_kit::AnyElement {
     let weak = cx.entity().downgrade();
@@ -333,8 +330,10 @@ fn clickable(
         .cursor_pointer()
         .flex()
         .items_stretch()
-        .when(wide, |w| w.w_full())
-        .when(!wide, |w| w.flex_1())
+        .when(span == 3, |w| w.w_full())
+        .when(span != 3, |w| {
+            w.flex_grow(span as f32).flex_shrink_1().min_w_0()
+        })
         .min_h(px(150.))
         .child(inner.h_full())
         .on_click(move |_, _, cx| {
@@ -708,4 +707,180 @@ fn network_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
                     net_total_str(total_tx)
                 )),
         )
+}
+
+/// Medya kontrol kartı: SMTC üzerinden çalan müzik + oynatma kontrolleri.
+fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let state = cx.global::<MediaState>();
+
+    if !state.has_session {
+        return card(cx)
+            .gap_2()
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(IconName::Play)
+                    .child(div().font_semibold().text_sm().child("Medya")),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Şu an çalan bir medya yok"),
+            );
+    }
+
+    // kapak görseli: SMTC'den gelen baytlar gpui Image'e dönüştürülür
+    let (cover, app, title, artist, album, playing) = {
+        let state = cx.global::<MediaState>();
+        let cover = state.thumb.as_ref().map(|thumb| {
+            let format = if thumb.format == "png" {
+                gpui_kit::ImageFormat::Png
+            } else {
+                gpui_kit::ImageFormat::Jpeg
+            };
+            let image = Arc::new(gpui_kit::Image {
+                format,
+                bytes: thumb.bytes.clone(),
+                id: thumb.id,
+            });
+            img(ImageSource::Image(image))
+                .size(px(72.))
+                .rounded_sm()
+                .flex_shrink_0()
+        });
+        (
+            cover,
+            state.app.clone(),
+            state.title.clone(),
+            state.artist.clone(),
+            state.album.clone(),
+            state.playing,
+        )
+    };
+
+    // düğmeler: komutu arka planda yollar (WinRT bloklu)
+    let cmd_btn = |id: &'static str, icon: IconName, cmd: MediaCmd| {
+        let weak = cx.entity().downgrade();
+        div()
+            .id(id)
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size_7()
+            .rounded_sm()
+            .text_color(cx.theme().muted_foreground)
+            .hover(|s| s.bg(cx.theme().accent.opacity(0.5)))
+            .child(icon)
+            .on_click(move |_, _, cx| {
+                cx.background_executor()
+                    .spawn(async move { media::send(cmd) })
+                    .detach();
+                let _ = weak;
+            })
+    };
+
+    let play_icon = if playing {
+        IconName::Pause
+    } else {
+        IconName::Play
+    };
+
+    let mut card = card(cx).gap_2().child(
+        h_flex()
+            .gap_2()
+            .items_center()
+            .child(IconName::Play)
+            .child(div().font_semibold().text_sm().child("Medya"))
+            .child(
+                div()
+                    .text_xs()
+                    .px_1p5()
+                    .rounded_full()
+                    .bg(cx.theme().accent.opacity(0.4))
+                    .text_color(cx.theme().muted_foreground)
+                    .child(app.clone()),
+            ),
+    );
+
+    if let Some(cover) = cover {
+        card =
+            card.child(
+                h_flex().gap_3().items_start().child(cover).child(
+                    v_flex()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .gap_1()
+                        .child(div().text_sm().font_semibold().truncate().child(
+                            if title.is_empty() {
+                                "Bilinmeyen parça".to_string()
+                            } else {
+                                title.clone()
+                            },
+                        ))
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .truncate()
+                                .child(if artist.is_empty() {
+                                    "Bilinmeyen sanatçı".to_string()
+                                } else {
+                                    artist.clone()
+                                }),
+                        )
+                        .when(!album.is_empty(), |c| {
+                            c.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .truncate()
+                                    .child(album.clone()),
+                            )
+                        }),
+                ),
+            );
+    } else {
+        card = card
+            .child(
+                div()
+                    .text_sm()
+                    .font_semibold()
+                    .truncate()
+                    .child(if title.is_empty() {
+                        "Bilinmeyen parça".to_string()
+                    } else {
+                        title.clone()
+                    }),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .truncate()
+                    .child(if artist.is_empty() {
+                        "Bilinmeyen sanatçı".to_string()
+                    } else {
+                        artist.clone()
+                    }),
+            );
+    }
+
+    card = card.child(
+        h_flex()
+            .gap_1()
+            .justify_center()
+            .pt_1()
+            .child(cmd_btn("media-prev", IconName::ChevronLeft, MediaCmd::Prev))
+            .child(cmd_btn("media-toggle", play_icon, MediaCmd::Toggle))
+            .child(cmd_btn(
+                "media-next",
+                IconName::ChevronRight,
+                MediaCmd::Next,
+            )),
+    );
+
+    card
 }

@@ -5,7 +5,7 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 
 ## Özellikler
 
-- **Anasayfa:** saat, günün programı ve genel durum kartları ile kart grid düzeni; tüm kartlar tıklanabilir. **Kart koleksiyonu:** Ayarlar'dan kart ekle/çıkar, sırala, genişliğini seç (1 = yarım sütun, 2 = tam sütun); granüler CPU/RAM/GPU/disk/sıcaklık/bilgisayar kartları da koleksiyonda
+- **Anasayfa:** saat, günün programı ve genel durum kartları ile kart grid düzeni; tüm kartlar tıklanabilir. **Kart koleksiyonu:** Ayarlar'dan kart ekle/çıkar, sırala, genişliğini seç (1/2/3 sütun — 3 = tam satır); granüler CPU/RAM/GPU/disk/sıcaklık/bilgisayar/ağ kartları da koleksiyonda; ayarlarda kartların canlı önizlemesi var, tıklayınca eklenir
 - **Saatler:** günde hangi saatte ne var? haftalık zaman çizelgesi (timeline) görünümü, canlı "şimdi" çizgisi; fare tekerleğiyle zoom (0.5×–4×)
 - **Alışkanlık takibi:** günlük, haftalık ve aylık frekansta alışkanlıklar; seri (streak) göstergesi
 - **Günlük rutinler:** her gün sıfırlanan rutin checklist'i
@@ -14,6 +14,7 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 - **Pomodoro:** 15/25/50 dk odak + 5 dk otomatik mola, saniyelik geri sayım, ani geçiş ve tur sayısı
 - **Notlar & hatırlatıcılar:** serbest notlar ve haftanın günlerine atanan hatırlatıcılar; bugün olanlar anasayfada zil ikonuyla listelenir
 - **Sistem bilgisi:** CPU (model/frekans/çekirdek başına kullanım/sıcaklık), RAM, GPU (NVML üzerinden NVIDIA; kullanım/VRAM/Güç/fan), disk dolulukları, tüm sıcaklık sensörleri, **ağ (anlık indirme/yükleme hızları + oturum toplamı)** ve genel bilgisayar bilgileri — anasayfada özet kartı da var
+- **Medya kontrolü:** Windows SMTC üzerinden herhangi bir uygulamanın (Spotify, tarayıcı, Groove, VLC…) çaldığı müzik anasayfadaki kartta görünür: çalan uygulama, parça/sanatçı/album adı, kapak resmi; önce/duraklat-oynat/sonra düğmeleriyle uzaktan kontrol
 - **Menü:** gruplu, tıklayınca açılan/kapanan alt menüler; başındaki düğmeyle simge moduna sıkıştırılabilir
 - **Ana içerik** geniş ekranda ortalanır, sağda boşluk kalmaz
 - **Kalıcı veri:** veriler `%APPDATA%\personal-dashboard\data.json` içinde JSON olarak saklanır
