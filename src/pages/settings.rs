@@ -1,9 +1,14 @@
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
-    button::Button, h_flex, input::Input, radio::RadioGroup, v_flex, ActiveTheme, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    input::Input,
+    radio::RadioGroup,
+    v_flex, ActiveTheme, IconName, Sizable as _,
 };
 use gpui_kit::{
-    div, px, AnyElement, Context, Div, IntoElement as _, ParentElement as _, Styled as _,
+    div, px, AnyElement, Context, Div, IntoElement as _, ParentElement as _, SharedString,
+    Styled as _,
 };
 
 use super::card;
@@ -19,7 +24,137 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .child(profile_card(view, cx))
         .child(theme_card(cx))
         .child(pomodoro_card(cx))
+        .child(home_layout_card(cx))
         .into_any_element()
+}
+
+const CARD_LABELS: [(&str, &str); 6] = [
+    ("schedule", "Bugünün programı"),
+    ("habits", "Alışkanlıklar"),
+    ("routines", "Rutinler"),
+    ("notes", "Notlar & hatırlatıcılar"),
+    ("pomodoro", "Pomodoro"),
+    ("system", "Sistem"),
+];
+
+fn card_label(key: &str) -> &'static str {
+    for (k, l) in CARD_LABELS {
+        if k == key {
+            return l;
+        }
+    }
+    "Sistem"
+}
+
+/// Kullanıcının anasayfa ızgarasını özelleştirdiği kart:
+/// kart görünürlüğü/sırası ve kart boyutu.
+fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
+    use gpui_kit::prelude::FluentBuilder as _;
+    let data = cx.global::<DashboardData>().clone();
+    let mut card = card(cx)
+        .gap_3()
+        .child(div().text_sm().font_medium().child("Anasayfa düzeni"));
+
+    // sıra + gizle/göster
+    card = card.children(data.home_order.iter().map(|key| {
+        let key = key.clone();
+        let hidden = data.home_hidden.contains(&key);
+        let label = card_label(&key);
+        h_flex()
+            .gap_2()
+            .items_center()
+            .py_1()
+            .child(
+                // gizle/göster
+                Button::new(SharedString::from(format!("home-vis-{}", key)))
+                    .xsmall()
+                    .ghost()
+                    .icon(if hidden {
+                        IconName::Close
+                    } else {
+                        IconName::CircleCheck
+                    })
+                    .tooltip(if hidden { "Göster" } else { "Gizle" })
+                    .on_click(cx.listener({
+                        let key = key.clone();
+                        move |_, _, _, cx| {
+                            cx.global_mut::<DashboardData>().toggle_home_card(&key);
+                            cx.notify();
+                        }
+                    })),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .text_sm()
+                    .when(hidden, |r| r.text_color(cx.theme().muted_foreground))
+                    .child(format!("{}{}", label, if hidden { " (gizli)" } else { "" })),
+            )
+            .child(
+                // yukarı taşı
+                Button::new(SharedString::from(format!("home-up-{}", key)))
+                    .xsmall()
+                    .ghost()
+                    .icon(IconName::ArrowUp)
+                    .tooltip("Yukarı")
+                    .on_click(cx.listener({
+                        let key = key.clone();
+                        move |_, _, _, cx| {
+                            cx.global_mut::<DashboardData>().move_home_card(&key, true);
+                            cx.notify();
+                        }
+                    })),
+            )
+            .child(
+                // aşağı taşı
+                Button::new(SharedString::from(format!("home-down-{}", key)))
+                    .xsmall()
+                    .ghost()
+                    .icon(IconName::ArrowDown)
+                    .tooltip("Aşağı")
+                    .on_click(cx.listener({
+                        let key = key.clone();
+                        move |_, _, _, cx| {
+                            cx.global_mut::<DashboardData>().move_home_card(&key, false);
+                            cx.notify();
+                        }
+                    })),
+            )
+    }));
+
+    // ölü kart satırı yoksa uyarı yerine: tüm kartlar gizliyse bilgi
+    card = card.child(
+        div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child("Tüm kartlar gizlenirse anasayfada sadece saat görünür."),
+    );
+
+    // kart boyutu
+    card.child(
+        RadioGroup::new("home-size")
+            .children(["Küçük", "Orta", "Büyük"])
+            .selected_index(Some(match data.home_size.as_str() {
+                "kucuk" => 0,
+                "orta" => 1,
+                _ => 2,
+            }))
+            .on_change(cx.listener(|_, index, _, cx| {
+                let size = match *index {
+                    0 => "kucuk",
+                    1 => "orta",
+                    _ => "buyuk",
+                };
+                cx.global_mut::<DashboardData>().set_home_size(size);
+                cx.notify();
+            })),
+    )
+    .child(
+        div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child("Kart yüksekliği (grid boyutu)."),
+    )
 }
 
 fn profile_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {

@@ -91,6 +91,8 @@ pub struct DashboardView {
     pub(crate) tl_zoom: f32,
     // Sol menü: grup açık mı (NAV_GROUPS sırasıyla)
     pub(crate) open_groups: [bool; 3],
+    // Sol menü: simge moduna sıkıştırılmış mı
+    pub(crate) sidebar_collapsed: bool,
 }
 
 impl DashboardView {
@@ -150,13 +152,14 @@ impl DashboardView {
             name_input,
             tl_zoom: 1.0,
             open_groups: [true; 3],
+            sidebar_collapsed: false,
         }
     }
 
-    fn sidebar_item(&self, page: Page, cx: &mut Context<Self>) -> AnyElement {
+    fn sidebar_item(&self, page: Page, compact: bool, cx: &mut Context<Self>) -> AnyElement {
         let weak = cx.entity().downgrade();
         let active = self.page == page;
-        div()
+        let mut row = div()
             .id(SharedString::from(format!("nav-{:?}", page)))
             .cursor_pointer()
             .w_full()
@@ -179,76 +182,114 @@ impl DashboardView {
                 })
             })
             .child(div().child(page.icon()))
-            .child(page.label().to_string())
             .on_click(move |_, _, cx| {
                 let _ = weak.update(cx, |this, cx| {
                     this.page = page;
                     cx.notify();
                 });
-            })
-            .into_any_element()
+            });
+        if compact {
+            row = row.justify_center().px_0();
+        } else {
+            row = row.child(page.label().to_string());
+        }
+        row.into_any_element()
     }
 
     fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
-        // gruplu, katlanabilir menü; her grup üst bilgisine tıklanınca açılır/kapanır
+        // gruplu, katlanabilir menü; her grup üst bilgisine tıklanınca açılır/kapanır.
+        // sıkıştırılmış modda sadece simgeler gösterilir.
+        let collapsed = self.sidebar_collapsed;
         let mut items: Vec<AnyElement> = Vec::new();
-        for (ix, (label, pages)) in NAV_GROUPS.iter().enumerate() {
-            let open = self.open_groups[ix];
-            let any_active = pages.contains(&self.page);
-            let weak = cx.entity().downgrade();
-
-            items.push(
-                div()
-                    .id(SharedString::from(format!("nav-group-toggle-{}", ix)))
-                    .cursor_pointer()
-                    .w_full()
-                    .px_3()
-                    .py_2()
-                    .mt(if ix == 0 { px(0.) } else { px(6.) })
-                    .rounded_sm()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_medium()
-                            .text_color(if any_active {
-                                cx.theme().foreground
-                            } else {
-                                cx.theme().muted_foreground
-                            })
-                            .flex_1()
-                            .child(*label),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(if open {
-                                IconName::ChevronDown
-                            } else {
-                                IconName::ChevronRight
-                            }),
-                    )
-                    .on_click(move |_, _, cx| {
-                        let _ = weak.update(cx, |this, cx| {
-                            this.open_groups[ix] = !this.open_groups[ix];
-                            cx.notify();
-                        });
-                    })
-                    .into_any_element(),
-            );
-
-            if open {
+        if collapsed {
+            for (_, pages) in NAV_GROUPS.iter() {
                 for page in pages.iter() {
-                    items.push(self.sidebar_item(*page, cx));
+                    items.push(self.sidebar_item(*page, true, cx));
+                }
+            }
+        } else {
+            for (ix, (label, pages)) in NAV_GROUPS.iter().enumerate() {
+                let open = self.open_groups[ix];
+                let any_active = pages.contains(&self.page);
+                let weak = cx.entity().downgrade();
+
+                items.push(
+                    div()
+                        .id(SharedString::from(format!("nav-group-toggle-{}", ix)))
+                        .cursor_pointer()
+                        .w_full()
+                        .px_3()
+                        .py_2()
+                        .mt(if ix == 0 { px(0.) } else { px(6.) })
+                        .rounded_sm()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_medium()
+                                .text_color(if any_active {
+                                    cx.theme().foreground
+                                } else {
+                                    cx.theme().muted_foreground
+                                })
+                                .flex_1()
+                                .child(*label),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(if open {
+                                    IconName::ChevronDown
+                                } else {
+                                    IconName::ChevronRight
+                                }),
+                        )
+                        .on_click(move |_, _, cx| {
+                            let _ = weak.update(cx, |this, cx| {
+                                this.open_groups[ix] = !this.open_groups[ix];
+                                cx.notify();
+                            });
+                        })
+                        .into_any_element(),
+                );
+
+                if open {
+                    for page in pages.iter() {
+                        items.push(self.sidebar_item(*page, false, cx));
+                    }
                 }
             }
         }
 
+        // sıkıştırma düğmesi: menü başında sola/dikeyde üstte
+        let weak = cx.entity().downgrade();
+        let toggle_btn = div()
+            .id("sidebar-collapse-toggle")
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size_7()
+            .rounded_sm()
+            .text_color(cx.theme().muted_foreground)
+            .hover(|s| s.bg(cx.theme().accent.opacity(0.5)))
+            .child(if collapsed {
+                IconName::PanelLeftOpen
+            } else {
+                IconName::PanelLeftClose
+            })
+            .on_click(move |_, _, cx| {
+                let _ = weak.update(cx, |this, cx| {
+                    this.sidebar_collapsed = !this.sidebar_collapsed;
+                    cx.notify();
+                });
+            });
+
         v_flex()
-            .w(px(232.))
+            .w(if collapsed { px(64.) } else { px(232.) })
             .flex_shrink_0()
             .h_full()
             .p_3()
@@ -273,18 +314,22 @@ impl DashboardView {
                             .text_color(cx.theme().primary_foreground)
                             .child(IconName::LayoutDashboard),
                     )
-                    .child(
-                        v_flex()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .child(div().text_sm().child("Personal Dashboard"))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("alışkanlık takibi"),
-                            ),
-                    ),
+                    .when(!collapsed, |row| {
+                        row.child(
+                            v_flex()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .flex_1()
+                                .child(div().text_sm().child("Personal Dashboard"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("alışkanlık takibi"),
+                                ),
+                        )
+                    })
+                    .child(toggle_btn),
             )
             .children(items)
             .child(
@@ -295,7 +340,9 @@ impl DashboardView {
                     .px_1()
                     .pt_3()
                     .child(IconName::CircleUser)
-                    .child(cx.global::<data::DashboardData>().name.clone()),
+                    .when(!collapsed, |row| {
+                        row.child(cx.global::<data::DashboardData>().name.clone())
+                    }),
             )
             .into_any_element()
     }
@@ -322,7 +369,6 @@ fn theme_button(cx: &mut Context<DashboardView>) -> Button {
             cx.refresh_windows();
         })
 }
-
 impl gpui_kit::Render for DashboardView {
     fn render(
         &mut self,
@@ -356,6 +402,7 @@ impl gpui_kit::Render for DashboardView {
                             h_flex()
                                 .gap_2()
                                 .items_center()
+                                .occlude()
                                 .child(theme_button(cx))
                                 .child(
                                     div()

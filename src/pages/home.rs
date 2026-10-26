@@ -226,49 +226,70 @@ pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
                     ),
                 ),
         )
-        // 2 sütunlu kart grid'i: tüm kartlar eşit genişlikte
+        // 2 sütunlu kart grid'i: sıra/görünürlük kullanıcının Ayarlar'dan
+        // özelleştirdiği düzene göre (data.home_order / home_hidden / home_size)
         .child(
             v_flex()
                 .gap_3()
-                .child(
+                .children(data.home_cards_visible().chunks(2).map(|row| {
                     h_flex()
                         .gap_3()
                         .items_stretch()
-                        .child(clickable(schedule_card(&data, cx), Page::Schedule, cx))
-                        .child(clickable(habits_card(&data, cx), Page::Habits, cx)),
-                )
-                .child(
-                    h_flex()
-                        .gap_3()
-                        .items_stretch()
-                        .child(clickable(routines_card(&data, cx), Page::Routines, cx))
-                        .child(clickable(notes_card(&data, cx), Page::Notes, cx)),
-                )
-                .child(
-                    h_flex()
-                        .gap_3()
-                        .items_stretch()
-                        .child(clickable(pomodoro_home_card(&data, cx), Page::Pomodoro, cx))
-                        .child(clickable(system_home_card(&data, cx), Page::System, cx)),
-                ),
+                        .children(row.iter().map(|key| {
+                            let page = home_key_page(key);
+                            let card_body = match *key {
+                                "schedule" => schedule_card(&data, cx),
+                                "habits" => habits_card(&data, cx),
+                                "routines" => routines_card(&data, cx),
+                                "notes" => notes_card(&data, cx),
+                                "pomodoro" => pomodoro_home_card(&data, cx),
+                                _ => system_home_card(&data, cx),
+                            };
+                            clickable(card_body, page, home_size_px(&data), cx)
+                        }))
+                })),
         )
         .into_any_element()
+}
+
+/// Kart anahtarı -> sayfa.
+fn home_key_page(key: &str) -> Page {
+    match key {
+        "schedule" => Page::Schedule,
+        "habits" => Page::Habits,
+        "routines" => Page::Routines,
+        "notes" => Page::Notes,
+        "pomodoro" => Page::Pomodoro,
+        _ => Page::System,
+    }
+}
+
+/// Kart boyutu tercihi -> anasayfa kart min yüksekliği.
+fn home_size_px(data: &DashboardData) -> f32 {
+    match data.home_size.as_str() {
+        "kucuk" => 110.0,
+        "buyuk" => 230.0,
+        _ => 160.0,
+    }
 }
 
 /// Tam kartı tıklanabilir yapar (hover'da pointer + hafif gölge).
 fn clickable(
     inner: gpui_kit::Div,
     page: Page,
+    min_h: f32,
     cx: &mut Context<DashboardView>,
 ) -> gpui_kit::AnyElement {
+    let radius = cx.theme().radius;
     let weak = cx.entity().downgrade();
     div()
         .id(SharedString::from(format!("go-{:?}", page)))
         .cursor_pointer()
         .flex_1()
-        .min_h(px(120.))
+        .min_h(px(min_h))
         .w_full()
-        .hover(|s| s.shadow_sm().opacity(0.95))
+        .rounded(radius)
+        .hover(|s| s.shadow_md())
         .child(inner)
         .on_click(move |_, _, cx| {
             let _ = weak.update(cx, |this, cx| {

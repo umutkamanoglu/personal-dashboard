@@ -225,6 +225,79 @@ pub struct DashboardData {
     /// aktif pomodoro seansı (yoksa None)
     #[serde(default)]
     pub pomodoro: Option<Pomodoro>,
+    /// anasayfa kart sırası (tıklanabilir kart anahtarları)
+    #[serde(default = "default_home_order")]
+    pub home_order: Vec<String>,
+    /// anasayfadan gizlenen kartlar
+    #[serde(default)]
+    pub home_hidden: Vec<String>,
+    /// anasayfa kart boyutu: "kucuk" | "orta" | "buyuk"
+    #[serde(default = "default_home_size")]
+    pub home_size: String,
+}
+
+pub const HOME_CARD_KEYS: [&str; 6] = [
+    "schedule", "habits", "routines", "notes", "pomodoro", "system",
+];
+
+fn default_home_order() -> Vec<String> {
+    HOME_CARD_KEYS.iter().map(|k| k.to_string()).collect()
+}
+fn default_home_size() -> String {
+    "orta".into()
+}
+
+impl DashboardData {
+    /// Anasayfa düzeni: görünür kartlar sırayla (sıra listesine hiç
+    /// eklenmemiş kartlar en sona eklenir).
+    pub fn home_cards_visible(&self) -> Vec<&'static str> {
+        let ordered: Vec<&'static str> = self
+            .home_order
+            .iter()
+            .filter_map(|k| {
+                HOME_CARD_KEYS
+                    .iter()
+                    .copied()
+                    .find(|c| *c == k.as_str())
+                    .filter(|c| !self.home_hidden.iter().any(|h| h == c))
+            })
+            .collect();
+        let rest = HOME_CARD_KEYS
+            .into_iter()
+            .filter(|k| !ordered.contains(k) && !self.home_hidden.iter().any(|h| h == k))
+            .collect::<Vec<_>>();
+        ordered.into_iter().chain(rest).collect()
+    }
+
+    pub fn toggle_home_card(&mut self, key: &str) {
+        if self.home_hidden.iter().any(|k| k == key) {
+            self.home_hidden.retain(|k| k != key);
+        } else {
+            if !self.home_order.iter().any(|k| k == key) {
+                self.home_order.push(key.to_string());
+            }
+            self.home_hidden.push(key.to_string());
+        }
+        self.save();
+    }
+
+    pub fn move_home_card(&mut self, key: &str, up: bool) {
+        if self.home_hidden.iter().any(|k| k == key) {
+            return;
+        }
+        if let Some(ix) = self.home_order.iter().position(|k| k == key) {
+            let target = if up { ix.saturating_sub(1) } else { ix + 1 };
+            if target < self.home_order.len() {
+                self.home_order.swap(ix, target);
+                self.save();
+            }
+        }
+    }
+
+    pub fn set_home_size(&mut self, size: &str) {
+        self.home_size = size.to_string();
+        self.save();
+    }
 }
 
 fn default_name() -> String {
@@ -247,10 +320,17 @@ impl DashboardData {
 
     pub fn load() -> Self {
         let path = Self::storage_path();
-        fs::read(path)
+        let mut data: DashboardData = fs::read(path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        // yeni kart anahtarlarını sıraya ekle (eski veri dosyaları için)
+        for k in HOME_CARD_KEYS {
+            if !data.home_order.iter().any(|o| o == k) {
+                data.home_order.push(k.to_string());
+            }
+        }
+        data
     }
 
     pub fn save(&self) {
@@ -737,10 +817,18 @@ mod tests {
         data.add_note("market listesi".into());
         data.add_reminder("çöp çıkar".into(), vec![0, 3]);
         data.add_reminder("araba yıka".into(), vec![6]);
-        // bugün pazartesi (0): çöp çıkar hatırlatılır, araba değil
+        // bugünün günü hangi hatırlatıcıya denk geliyorsa o gelir
+        let w = today().weekday().num_days_from_monday() as u8;
         let today = data.reminders_today();
-        assert_eq!(today.len(), 1);
-        assert_eq!(today[0].text, "çöp çıkar");
+        if w == 0 || w == 3 {
+            assert_eq!(today.len(), 1);
+            assert_eq!(today[0].text, "çöp çıkar");
+        } else if w == 6 {
+            assert_eq!(today.len(), 1);
+            assert_eq!(today[0].text, "araba yıka");
+        } else {
+            assert!(today.is_empty());
+        }
 
         let note_id = data.notes[0].id.clone();
         data.remove_note(&note_id);
@@ -780,11 +868,19 @@ mod tests {
             ],
             ..Default::default()
         };
+        // bugünün günü (haftanın hangi günüyse) o girişler dönmalı
+        let w = today().weekday().num_days_from_monday() as u8;
         let today = data.schedule_today();
-        // saat sırasına dizilmiş ve sadece pazartesi olanlar
-        assert_eq!(today.len(), 2);
-        assert_eq!(today[0].name, "sabah");
-        assert_eq!(today[1].name, "akşam");
+        let expected: Vec<&str> = match w {
+            0 => vec!["sabah", "akşam"],
+            3 => vec!["akşam"],
+            6 => vec!["öğlen"],
+            _ => vec![],
+        };
+        assert_eq!(
+            today.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(),
+            expected
+        );
 
         // diğer günler (çarşamba = 2) boş
         assert!(data.schedule_for(2).is_empty());
@@ -801,18 +897,18 @@ mod tests {
         data.habit_completions
             .entry(id.clone())
             .or_default()
-            .insert("2026-10-25".to_string()); // dün
+            .insert((today() - chrono::Duration::days(1)).to_string()); // dün
         data.habit_completions
             .entry(id)
             .or_default()
-            .insert("2026-10-23".to_string()); // iki gün önce
+            .insert((today() - chrono::Duration::days(3)).to_string()); // üç gün önce
         let history = data.habit_history(&habit, 7);
         assert_eq!(history.len(), 7);
         // eskiden yeniye sıralı: son gün bugün, yapılmadı
         assert!(!history[6].1);
         assert!(history[5].1); // dün
         assert!(!history[4].1);
-        assert!(history[3].1); // iki gün önce
+        assert!(history[3].1); // üç gün önce
 
         let rate = data.daily_history(7);
         assert_eq!(rate.len(), 7);
