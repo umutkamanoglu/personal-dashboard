@@ -762,7 +762,6 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
 
     // düğmeler: komutu arka planda yollar (WinRT bloklu)
     let cmd_btn = |id: &'static str, icon: IconName, cmd: MediaCmd| {
-        let weak = cx.entity().downgrade();
         div()
             .id(id)
             .cursor_pointer()
@@ -775,10 +774,11 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
             .hover(|s| s.bg(cx.theme().accent.opacity(0.5)))
             .child(icon)
             .on_click(move |_, _, cx| {
+                // tıklama dıştaki kart sarmalayıcısına (sayfa geçişi) sızmaz
+                cx.stop_propagation();
                 cx.background_executor()
                     .spawn(async move { media::send(cmd) })
                     .detach();
-                let _ = weak;
             })
     };
 
