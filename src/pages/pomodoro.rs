@@ -3,7 +3,6 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::Input,
-    radio::RadioGroup,
     v_flex, ActiveTheme, IconName, Sizable as _,
 };
 use gpui_kit::{
@@ -14,8 +13,7 @@ use super::{card, section_title};
 use crate::app::DashboardView;
 use crate::data::{DashboardData, PomodoroPhase};
 
-const WORK_OPTIONS: [u32; 3] = [15, 25, 50];
-const BREAK_MIN: u32 = 5;
+const BREAK_MIN_FALLBACK: u32 = 5;
 
 pub fn pomodoro_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> AnyElement {
     v_flex()
@@ -100,36 +98,36 @@ fn pomodoro_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
     }
 }
 
-fn start_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
+fn start_card(_view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
+    let data = cx.global::<DashboardData>().clone();
+    let work = if data.work_min >= 5 {
+        data.work_min
+    } else {
+        25
+    };
+    let break_min = if data.break_min >= 1 {
+        data.break_min
+    } else {
+        BREAK_MIN_FALLBACK
+    };
     card(cx).gap_3().child(
         v_flex()
             .gap_3()
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_medium()
-                            .text_color(cx.theme().muted_foreground)
-                            .child("Odak süresi"),
-                    )
-                    .child(
-                        RadioGroup::new("pomo-work-min")
-                            .children(["15 dk", "25 dk", "50 dk"])
-                            .selected_index(Some(view.pomo_work_idx))
-                            .on_change(cx.listener(|this, index, _, cx| {
-                                this.pomo_work_idx = *index;
-                                cx.notify();
-                            })),
-                    ),
+                div()
+                    .text_xs()
+                    .font_medium()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!(
+                        "Odak: {} dk · Mola: {} dk (Ayarlar'dan değiştir)",
+                        work, break_min
+                    )),
             )
             .child(
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(Input::new(&view.pomo_label_input).flex_1())
+                    .child(Input::new(&_view.pomo_label_input).flex_1())
                     .child(
                         Button::new("start-pomodoro")
                             .primary()
@@ -138,9 +136,12 @@ fn start_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 let label =
                                     this.pomo_label_input.read(cx).value().trim().to_string();
-                                let work = WORK_OPTIONS[this.pomo_work_idx];
-                                cx.global_mut::<DashboardData>()
-                                    .start_pomodoro(label, work, BREAK_MIN);
+                                let data = cx.global::<DashboardData>().clone();
+                                cx.global_mut::<DashboardData>().start_pomodoro(
+                                    label,
+                                    data.work_min,
+                                    data.break_min,
+                                );
                                 cx.notify();
                             })),
                     ),
@@ -149,7 +150,7 @@ fn start_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("Her odak fazından sonra 5 dk mola otomatik başlar."),
+                    .child("Her odak fazından sonra mola otomatik başlar."),
             ),
     )
 }

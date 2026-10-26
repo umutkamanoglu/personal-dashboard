@@ -11,7 +11,7 @@ use gpui_kit::{
 use super::{card, progress_bar};
 use crate::app::{DashboardView, Page};
 use crate::data::{self, DashboardData, PomodoroPhase};
-use chrono::Local;
+use chrono::{Local, Timelike};
 
 fn header_button(page: Page, cx: &mut Context<DashboardView>) -> Button {
     let weak = cx.entity().downgrade();
@@ -33,24 +33,6 @@ fn card_row(title: &str, page: Page, cx: &mut Context<DashboardView>) -> gpui_ki
         .items_center()
         .child(div().font_semibold().text_sm().child(title.to_string()))
         .child(header_button(page, cx))
-}
-
-fn clock_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
-    let now = Local::now();
-    card(cx)
-        .gap_2()
-        .child(
-            div()
-                .font_semibold()
-                .text_xl()
-                .child(now.format("%H:%M").to_string()),
-        )
-        .child(
-            div()
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child(data::today_tr()),
-        )
 }
 
 fn schedule_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
@@ -207,40 +189,119 @@ fn notes_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit
 
 pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
     let data: DashboardData = cx.global::<DashboardData>().clone();
+    let now = chrono::Local::now();
 
     v_flex()
-        .gap_4()
+        .gap_5()
         .w_full()
         .max_w(px(900.))
-        .child(
-            v_flex()
-                .gap_1()
-                .child(
-                    div()
-                        .font_semibold()
-                        .text_xl()
-                        .child(format!("{}, Umut", data::greeting())),
-                )
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(data::today_tr()),
-                ),
-        )
+        // başlık: selamlama solda, büyük saat sağda
         .child(
             h_flex()
-                .flex_wrap()
+                .justify_between()
+                .items_center()
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(div().font_semibold().text_xl().child(format!(
+                            "{}, {}",
+                            data::greeting(),
+                            data.name
+                        )))
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(data::today_tr()),
+                        ),
+                )
+                .child(
+                    v_flex().gap_0().items_end().child(
+                        div()
+                            .font_semibold()
+                            .text_2xl()
+                            .child(now.format("%H:%M").to_string()),
+                    ),
+                ),
+        )
+        // 2 sütunlu kart grid'i: tüm kartlar eşit genişlikte
+        .child(
+            v_flex()
                 .gap_3()
-                .items_start()
-                .child(clock_card(cx).w(px(220.)))
-                .child(schedule_card(&data, cx).w(px(320.)))
-                .child(habits_card(&data, cx).w(px(320.)))
-                .child(routines_card(&data, cx).w(px(320.)))
-                .child(notes_card(&data, cx).w(px(320.)))
-                .child(pomodoro_home_card(&data, cx).w(px(320.))),
+                .child(
+                    h_flex()
+                        .gap_3()
+                        .items_stretch()
+                        .child(schedule_card(&data, cx).flex_1().min_h(px(120.)))
+                        .child(habits_card(&data, cx).flex_1().min_h(px(120.))),
+                )
+                .child(
+                    h_flex()
+                        .gap_3()
+                        .items_stretch()
+                        .child(routines_card(&data, cx).flex_1().min_h(px(120.)))
+                        .child(notes_card(&data, cx).flex_1().min_h(px(120.))),
+                )
+                .child(
+                    h_flex()
+                        .gap_3()
+                        .items_stretch()
+                        .child(pomodoro_home_card(&data, cx).flex_1().min_h(px(120.)))
+                        .child(clock_card_extra(cx).flex_1().min_h(px(120.))),
+                ),
         )
         .into_any_element()
+}
+
+/// Saat kartı yerine grid'i dolduran "bugün" özet kartı.
+fn clock_card_extra(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let data = cx.global::<DashboardData>();
+    let data = data.clone();
+    let entries = data.schedule_today();
+    let now = Local::now();
+    let now_min: i32 = (now.hour() * 60 + now.minute()) as i32;
+    let next = entries.iter().find(|e| mins_of(&e.end) > now_min);
+
+    card(cx).gap_2().child(
+        v_flex()
+            .gap_1()
+            .child(
+                div()
+                    .text_xs()
+                    .font_medium()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Şimdi / sırada"),
+            )
+            .child(match next {
+                Some(e) => v_flex()
+                    .gap_0()
+                    .child(div().font_semibold().text_sm().child(e.name.clone()))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!("{} – {}", e.start, e.end)),
+                    ),
+                None => div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Sırada program yok."),
+            }),
+    )
+}
+
+/// "HH:MM" -> dakika.
+fn mins_of(t: &str) -> i32 {
+    let (h, m) = t
+        .split_once(':')
+        .map(|(h, m)| {
+            (
+                h.trim().parse::<i32>().unwrap_or(0),
+                m.trim().parse::<i32>().unwrap_or(0),
+            )
+        })
+        .unwrap_or((0, 0));
+    h * 60 + m
 }
 
 /// Aktif pomodoro seansını anasayfada gösterir.

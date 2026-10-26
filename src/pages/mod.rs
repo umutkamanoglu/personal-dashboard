@@ -4,6 +4,7 @@ mod notes;
 mod pomodoro;
 mod routines;
 mod schedule;
+mod settings;
 mod stats;
 
 pub use habits::habits_page;
@@ -12,6 +13,7 @@ pub use notes::notes_page;
 pub use pomodoro::pomodoro_page;
 pub use routines::routines_page;
 pub use schedule::schedule_page;
+pub use settings::settings_page;
 pub use stats::stats_page;
 
 use gpui_kit::base::StyledExt as _;

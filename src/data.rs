@@ -195,6 +195,15 @@ impl ScheduleEntry {
 pub struct DashboardData {
     pub habits: Vec<Habit>,
     pub routine_items: Vec<RoutineItem>,
+    /// kullanıcı adı (selamlamada kullanılır)
+    #[serde(default = "default_name")]
+    pub name: String,
+    /// pomodoro varsayılan odak süresi (dk)
+    #[serde(default = "default_work_min")]
+    pub work_min: u32,
+    /// pomodoro varsayılan mola süresi (dk)
+    #[serde(default = "default_break_min")]
+    pub break_min: u32,
     /// habit id -> completed period keys ("2026-10-26" / week-monday / "2026-10")
     #[serde(default)]
     pub habit_completions: HashMap<String, BTreeSet<String>>,
@@ -216,6 +225,16 @@ pub struct DashboardData {
     /// aktif pomodoro seansı (yoksa None)
     #[serde(default)]
     pub pomodoro: Option<Pomodoro>,
+}
+
+fn default_name() -> String {
+    "Umut".into()
+}
+fn default_work_min() -> u32 {
+    25
+}
+fn default_break_min() -> u32 {
+    5
 }
 
 impl DashboardData {
@@ -269,6 +288,18 @@ impl DashboardData {
     /// Tema tercihi kaydı.
     pub fn set_dark_mode(&mut self, dark: bool) {
         self.dark_mode = dark;
+        self.save();
+    }
+
+    /// Profil ve pomodoro varsayılanlarını kaydeder.
+    pub fn set_settings(&mut self, name: String, work_min: u32, break_min: u32) {
+        self.name = if name.trim().is_empty() {
+            "Umut".into()
+        } else {
+            name
+        };
+        self.work_min = work_min.clamp(5, 120);
+        self.break_min = break_min.clamp(1, 60);
         self.save();
     }
 

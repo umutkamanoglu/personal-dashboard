@@ -24,6 +24,7 @@ pub enum Page {
     Stats,
     Notes,
     Pomodoro,
+    Settings,
 }
 
 impl Page {
@@ -36,10 +37,11 @@ impl Page {
             Page::Stats => "İstatistik",
             Page::Notes => "Notlar",
             Page::Pomodoro => "Pomodoro",
+            Page::Settings => "Ayarlar",
         }
     }
 
-    const ALL: [Page; 7] = [
+    const ALL: [Page; 8] = [
         Page::Home,
         Page::Schedule,
         Page::Habits,
@@ -47,6 +49,7 @@ impl Page {
         Page::Stats,
         Page::Notes,
         Page::Pomodoro,
+        Page::Settings,
     ];
 
     fn icon(self) -> IconName {
@@ -58,6 +61,7 @@ impl Page {
             Page::Stats => IconName::ChartPie,
             Page::Notes => IconName::FileText,
             Page::Pomodoro => IconName::Play,
+            Page::Settings => IconName::Settings2,
         }
     }
 }
@@ -81,7 +85,10 @@ pub struct DashboardView {
     pub(crate) remind_days: [bool; 7],
     // Pomodoro formu
     pub(crate) pomo_label_input: Entity<InputState>,
-    pub(crate) pomo_work_idx: usize,
+    // Ayarlar formu
+    pub(crate) name_input: Entity<InputState>,
+    // Saatler timeline zoom (0.5..4)
+    pub(crate) tl_zoom: f32,
 }
 
 impl DashboardView {
@@ -98,6 +105,15 @@ impl DashboardView {
             cx.new(|cx| InputState::new(window, cx).placeholder("Hatırlatıcı (ör. çöp çıkar)"));
         let pomo_label_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Ne üzerine odaklanıyorsun?"));
+        let name_input = cx.new(|cx| {
+            let mut st = InputState::new(window, cx);
+            st.set_value(
+                cx.global::<crate::data::DashboardData>().name.clone(),
+                window,
+                cx,
+            );
+            st
+        });
         let routine_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Yeni rutin ekle..."));
 
@@ -133,7 +149,8 @@ impl DashboardView {
             remind_input,
             remind_days: [false; 7],
             pomo_label_input,
-            pomo_work_idx: 1,
+            name_input,
+            tl_zoom: 1.0,
         }
     }
 
@@ -214,7 +231,7 @@ fn theme_button(cx: &mut Context<DashboardView>) -> Button {
         .ghost()
         .icon(if dark { IconName::Sun } else { IconName::Moon })
         .tooltip(if dark { "Açık tema" } else { "Koyu tema" })
-        .on_click(|_, _, cx| {
+        .on_click(|_, window, cx| {
             let dark = cx.theme().mode.is_dark();
             let mode = if dark {
                 gpui_kit::component::ThemeMode::Light
@@ -223,7 +240,8 @@ fn theme_button(cx: &mut Context<DashboardView>) -> Button {
             };
             cx.global_mut::<crate::data::DashboardData>()
                 .set_dark_mode(!dark);
-            gpui_kit::component::Theme::change(mode, None, cx);
+            gpui_kit::component::Theme::change(mode, Some(window), cx);
+            cx.refresh_windows();
         })
 }
 
@@ -241,6 +259,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Stats => pages::stats_page(self, cx),
             Page::Notes => pages::notes_page(self, cx),
             Page::Pomodoro => pages::pomodoro_page(self, cx),
+            Page::Settings => pages::settings_page(self, cx),
         };
 
         v_flex()
