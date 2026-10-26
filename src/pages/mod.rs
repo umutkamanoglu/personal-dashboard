@@ -6,6 +6,7 @@ mod routines;
 mod schedule;
 mod settings;
 mod stats;
+mod system;
 
 pub use habits::habits_page;
 pub use home::home_page;
@@ -15,6 +16,7 @@ pub use routines::routines_page;
 pub use schedule::schedule_page;
 pub use settings::settings_page;
 pub use stats::stats_page;
+pub use system::system_page;
 
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{h_flex, ActiveTheme};

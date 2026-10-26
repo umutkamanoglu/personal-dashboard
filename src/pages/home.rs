@@ -5,13 +5,15 @@ use gpui_kit::component::{
     h_flex, v_flex, ActiveTheme, IconName, Sizable as _,
 };
 use gpui_kit::{
-    div, px, AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    div, px, AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _,
 };
 
 use super::{card, progress_bar};
 use crate::app::{DashboardView, Page};
 use crate::data::{self, DashboardData, PomodoroPhase};
-use chrono::{Local, Timelike};
+use crate::hardware::HardwareInfo;
+use chrono::Local;
 
 fn header_button(page: Page, cx: &mut Context<DashboardView>) -> Button {
     let weak = cx.entity().downgrade();
@@ -189,7 +191,7 @@ fn notes_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit
 
 pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
     let data: DashboardData = cx.global::<DashboardData>().clone();
-    let now = chrono::Local::now();
+    let now = Local::now();
 
     v_flex()
         .gap_5()
@@ -232,76 +234,89 @@ pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
                     h_flex()
                         .gap_3()
                         .items_stretch()
-                        .child(schedule_card(&data, cx).flex_1().min_h(px(120.)))
-                        .child(habits_card(&data, cx).flex_1().min_h(px(120.))),
+                        .child(clickable(schedule_card(&data, cx), Page::Schedule, cx))
+                        .child(clickable(habits_card(&data, cx), Page::Habits, cx)),
                 )
                 .child(
                     h_flex()
                         .gap_3()
                         .items_stretch()
-                        .child(routines_card(&data, cx).flex_1().min_h(px(120.)))
-                        .child(notes_card(&data, cx).flex_1().min_h(px(120.))),
+                        .child(clickable(routines_card(&data, cx), Page::Routines, cx))
+                        .child(clickable(notes_card(&data, cx), Page::Notes, cx)),
                 )
                 .child(
                     h_flex()
                         .gap_3()
                         .items_stretch()
-                        .child(pomodoro_home_card(&data, cx).flex_1().min_h(px(120.)))
-                        .child(clock_card_extra(cx).flex_1().min_h(px(120.))),
+                        .child(clickable(pomodoro_home_card(&data, cx), Page::Pomodoro, cx))
+                        .child(clickable(system_home_card(&data, cx), Page::System, cx)),
                 ),
         )
         .into_any_element()
 }
 
-/// Saat kartı yerine grid'i dolduran "bugün" özet kartı.
-fn clock_card_extra(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
-    let data = cx.global::<DashboardData>();
-    let data = data.clone();
-    let entries = data.schedule_today();
-    let now = Local::now();
-    let now_min: i32 = (now.hour() * 60 + now.minute()) as i32;
-    let next = entries.iter().find(|e| mins_of(&e.end) > now_min);
-
-    card(cx).gap_2().child(
-        v_flex()
-            .gap_1()
-            .child(
-                div()
-                    .text_xs()
-                    .font_medium()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Şimdi / sırada"),
-            )
-            .child(match next {
-                Some(e) => v_flex()
-                    .gap_0()
-                    .child(div().font_semibold().text_sm().child(e.name.clone()))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} – {}", e.start, e.end)),
-                    ),
-                None => div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Sırada program yok."),
-            }),
-    )
+/// Tam kartı tıklanabilir yapar (hover'da pointer + hafif gölge).
+fn clickable(
+    inner: gpui_kit::Div,
+    page: Page,
+    cx: &mut Context<DashboardView>,
+) -> gpui_kit::AnyElement {
+    let weak = cx.entity().downgrade();
+    div()
+        .id(SharedString::from(format!("go-{:?}", page)))
+        .cursor_pointer()
+        .flex_1()
+        .min_h(px(120.))
+        .w_full()
+        .hover(|s| s.shadow_sm().opacity(0.95))
+        .child(inner)
+        .on_click(move |_, _, cx| {
+            let _ = weak.update(cx, |this, cx| {
+                this.page = page;
+                cx.notify();
+            });
+        })
+        .into_any_element()
 }
 
-/// "HH:MM" -> dakika.
-fn mins_of(t: &str) -> i32 {
-    let (h, m) = t
-        .split_once(':')
-        .map(|(h, m)| {
-            (
-                h.trim().parse::<i32>().unwrap_or(0),
-                m.trim().parse::<i32>().unwrap_or(0),
-            )
-        })
-        .unwrap_or((0, 0));
-    h * 60 + m
+/// Donanım özeti kartı (CPU/RAM/GPU).
+fn system_home_card(_data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let info = cx.global::<HardwareInfo>();
+    let cpu = info.cpu_usage();
+    let ram = info.ram_percent();
+    let gpu = info.gpu_info();
+
+    let mut card = card(cx).gap_2();
+    card = card.child(card_row("Sistem", Page::System, cx));
+
+    let mut rows = v_flex().gap_1();
+    rows = rows.child(
+        h_flex()
+            .justify_between()
+            .py_1()
+            .child(div().text_sm().child("CPU"))
+            .child(div().text_sm().font_medium().child(format!("{:.0}%", cpu))),
+    );
+    rows = rows.child(
+        h_flex()
+            .justify_between()
+            .py_1()
+            .child(div().text_sm().child("RAM"))
+            .child(div().text_sm().font_medium().child(format!("{:.0}%", ram))),
+    );
+    if let Some(g) = gpu {
+        rows = rows.child(
+            h_flex()
+                .justify_between()
+                .py_1()
+                .child(div().text_sm().child("GPU"))
+                .child(div().text_sm().font_medium().child(match g.usage {
+                    Some(u) => format!("{:.0}%", u),
+                    None => "—".into(),
+                })),
+        );
+    }
+    card.child(rows)
 }
 
 /// Aktif pomodoro seansını anasayfada gösterir.

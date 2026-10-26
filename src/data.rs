@@ -772,13 +772,14 @@ mod tests {
 
     #[test]
     fn schedule_filter_and_sort() {
-        let mut data = DashboardData::default();
-        // 2026-10-26 Pazartesi (weekday=0)
-        data.schedule = vec![
-            entry("akşam", "19:00", "20:00", vec![0, 3]),
-            entry("sabah", "07:00", "08:00", vec![0]),
-            entry("öğlen", "12:00", "13:00", vec![6]), // sadece pazar
-        ];
+        let mut data = DashboardData {
+            schedule: vec![
+                entry("akşam", "19:00", "20:00", vec![0, 3]),
+                entry("sabah", "07:00", "08:00", vec![0]),
+                entry("öğlen", "12:00", "13:00", vec![6]), // sadece pazar
+            ],
+            ..Default::default()
+        };
         let today = data.schedule_today();
         // saat sırasına dizilmiş ve sadece pazartesi olanlar
         assert_eq!(today.len(), 2);

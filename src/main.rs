@@ -1,5 +1,6 @@
 mod app;
 mod data;
+mod hardware;
 mod pages;
 
 use gpui_kit::component::TitleBar;
@@ -13,6 +14,7 @@ fn main() {
         .run(move |cx| {
             gpui_kit::init(cx);
             cx.set_global(data);
+            cx.set_global(hardware::HardwareInfo::new());
 
             // kayıtlı tema tercihi uygulanır
             {

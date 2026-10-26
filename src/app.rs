@@ -1,18 +1,20 @@
+use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::InputState,
-    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     v_flex, ActiveTheme, IconName, Sizable as _, TitleBar,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    div, px, AppContext as _, Context, Entity, InteractiveElement as _, ParentElement as _,
+    div, px, AnyElement, AppContext as _, Context, Entity, InteractiveElement as _,
+    IntoElement as _, ParentElement as _, SharedString, StatefulInteractiveElement as _,
     Styled as _,
 };
 
 use crate::data;
+use crate::hardware::HardwareInfo;
 use crate::pages;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,10 +23,11 @@ pub enum Page {
     Schedule,
     Habits,
     Routines,
-    Stats,
     Notes,
+    Stats,
     Pomodoro,
     Settings,
+    System,
 }
 
 impl Page {
@@ -38,19 +41,9 @@ impl Page {
             Page::Notes => "Notlar",
             Page::Pomodoro => "Pomodoro",
             Page::Settings => "Ayarlar",
+            Page::System => "Sistem",
         }
     }
-
-    const ALL: [Page; 8] = [
-        Page::Home,
-        Page::Schedule,
-        Page::Habits,
-        Page::Routines,
-        Page::Stats,
-        Page::Notes,
-        Page::Pomodoro,
-        Page::Settings,
-    ];
 
     fn icon(self) -> IconName {
         match self {
@@ -62,13 +55,20 @@ impl Page {
             Page::Notes => IconName::FileText,
             Page::Pomodoro => IconName::Play,
             Page::Settings => IconName::Settings2,
+            Page::System => IconName::Cpu,
         }
     }
 }
 
+/// Menü grupları: (etiket, sayfalar)
+const NAV_GROUPS: [(&str, &[Page]); 3] = [
+    ("Genel", &[Page::Home, Page::System, Page::Settings]),
+    ("Takip", &[Page::Habits, Page::Routines, Page::Stats]),
+    ("Zaman", &[Page::Schedule, Page::Notes, Page::Pomodoro]),
+];
+
 pub struct DashboardView {
     pub(crate) page: Page,
-    collapsed: bool,
     // Saatler formu
     pub(crate) sched_name_input: Entity<InputState>,
     pub(crate) sched_start_input: Entity<InputState>,
@@ -89,6 +89,8 @@ pub struct DashboardView {
     pub(crate) name_input: Entity<InputState>,
     // Saatler timeline zoom (0.5..4)
     pub(crate) tl_zoom: f32,
+    // Sol menü: grup açık mı (NAV_GROUPS sırasıyla)
+    pub(crate) open_groups: [bool; 3],
 }
 
 impl DashboardView {
@@ -107,17 +109,13 @@ impl DashboardView {
             cx.new(|cx| InputState::new(window, cx).placeholder("Ne üzerine odaklanıyorsun?"));
         let name_input = cx.new(|cx| {
             let mut st = InputState::new(window, cx);
-            st.set_value(
-                cx.global::<crate::data::DashboardData>().name.clone(),
-                window,
-                cx,
-            );
+            st.set_value(cx.global::<data::DashboardData>().name.clone(), window, cx);
             st
         });
         let routine_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Yeni rutin ekle..."));
 
-        // saniyelik tick: saat + pomodoro geri sayımı güncel kalsın
+        // saniyelik tick: saat + pomodoro + donanım güncellensin
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
                 .timer(std::time::Duration::from_secs(1))
@@ -125,8 +123,9 @@ impl DashboardView {
             if let Some(this) = this.upgrade() {
                 this.update(cx, |_, cx| {
                     // pomodoro fazı dolduysa otomatik geçir
-                    cx.global_mut::<crate::data::DashboardData>()
-                        .advance_pomodoro();
+                    cx.global_mut::<data::DashboardData>().advance_pomodoro();
+                    // donanım: CPU/RAM her saniye, sıcaklıklar seyrek (hardware içinden)
+                    cx.global_mut::<HardwareInfo>().refresh_light();
                     cx.notify()
                 });
             } else {
@@ -137,7 +136,6 @@ impl DashboardView {
 
         Self {
             page: Page::Home,
-            collapsed: false,
             sched_name_input,
             sched_start_input,
             sched_end_input,
@@ -151,75 +149,155 @@ impl DashboardView {
             pomo_label_input,
             name_input,
             tl_zoom: 1.0,
+            open_groups: [true; 3],
         }
     }
 
-    fn sidebar_item(&self, page: Page, cx: &mut Context<Self>) -> SidebarMenuItem {
+    fn sidebar_item(&self, page: Page, cx: &mut Context<Self>) -> AnyElement {
         let weak = cx.entity().downgrade();
-        SidebarMenuItem::new(page.label())
-            .icon(page.icon())
-            .active(self.page == page)
+        let active = self.page == page;
+        div()
+            .id(SharedString::from(format!("nav-{:?}", page)))
+            .cursor_pointer()
+            .w_full()
+            .px_3()
+            .py_2()
+            .rounded(cx.theme().radius)
+            .flex()
+            .items_center()
+            .gap_2()
+            .text_sm()
+            .when(active, |r| {
+                r.bg(cx.theme().accent)
+                    .text_color(cx.theme().accent_foreground)
+                    .font_medium()
+            })
+            .when(!active, |r| {
+                r.text_color(cx.theme().muted_foreground).hover(|s| {
+                    s.bg(cx.theme().accent.opacity(0.5))
+                        .text_color(cx.theme().accent_foreground)
+                })
+            })
+            .child(div().child(page.icon()))
+            .child(page.label().to_string())
             .on_click(move |_, _, cx| {
                 let _ = weak.update(cx, |this, cx| {
                     this.page = page;
                     cx.notify();
                 });
             })
+            .into_any_element()
     }
 
-    fn sidebar(&self, cx: &mut Context<Self>) -> Sidebar<SidebarGroup<SidebarMenu>> {
-        let menu = SidebarMenu::new().children(
-            Page::ALL
-                .iter()
-                .map(|page| self.sidebar_item(*page, cx))
-                .collect::<Vec<_>>(),
-        );
+    fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
+        // gruplu, katlanabilir menü; her grup üst bilgisine tıklanınca açılır/kapanır
+        let mut items: Vec<AnyElement> = Vec::new();
+        for (ix, (label, pages)) in NAV_GROUPS.iter().enumerate() {
+            let open = self.open_groups[ix];
+            let any_active = pages.contains(&self.page);
+            let weak = cx.entity().downgrade();
 
-        let collapsed = self.collapsed;
-        Sidebar::new("app-sidebar")
-            .collapsed(collapsed)
+            items.push(
+                div()
+                    .id(SharedString::from(format!("nav-group-toggle-{}", ix)))
+                    .cursor_pointer()
+                    .w_full()
+                    .px_3()
+                    .py_2()
+                    .mt(if ix == 0 { px(0.) } else { px(6.) })
+                    .rounded_sm()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_medium()
+                            .text_color(if any_active {
+                                cx.theme().foreground
+                            } else {
+                                cx.theme().muted_foreground
+                            })
+                            .flex_1()
+                            .child(*label),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(if open {
+                                IconName::ChevronDown
+                            } else {
+                                IconName::ChevronRight
+                            }),
+                    )
+                    .on_click(move |_, _, cx| {
+                        let _ = weak.update(cx, |this, cx| {
+                            this.open_groups[ix] = !this.open_groups[ix];
+                            cx.notify();
+                        });
+                    })
+                    .into_any_element(),
+            );
+
+            if open {
+                for page in pages.iter() {
+                    items.push(self.sidebar_item(*page, cx));
+                }
+            }
+        }
+
+        v_flex()
             .w(px(232.))
-            .header(
-                SidebarHeader::new().child(
-                    h_flex()
-                        .gap_2()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .size_8()
-                                .flex_shrink_0()
-                                .rounded(cx.theme().radius)
-                                .bg(cx.theme().primary)
-                                .text_color(cx.theme().primary_foreground)
-                                .child(IconName::LayoutDashboard),
-                        )
-                        .when(!collapsed, |this| {
-                            this.child(
-                                v_flex()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .child(div().text_sm().child("Personal Dashboard"))
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("alışkanlık takibi"),
-                                    ),
-                            )
-                        }),
-                ),
+            .flex_shrink_0()
+            .h_full()
+            .p_3()
+            .gap_1()
+            .border_r_1()
+            .border_color(cx.theme().border)
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .px_1()
+                    .pb_3()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size_8()
+                            .flex_shrink_0()
+                            .rounded(cx.theme().radius)
+                            .bg(cx.theme().primary)
+                            .text_color(cx.theme().primary_foreground)
+                            .child(IconName::LayoutDashboard),
+                    )
+                    .child(
+                        v_flex()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .child(div().text_sm().child("Personal Dashboard"))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("alışkanlık takibi"),
+                            ),
+                    ),
             )
-            .child(SidebarGroup::new("main-group").child(menu))
-            .footer(
-                SidebarFooter::new().child(
-                    h_flex()
-                        .gap_2()
-                        .child(IconName::CircleUser)
-                        .when(!collapsed, |this| this.child("Umut")),
-                ),
+            .children(items)
+            .child(
+                h_flex()
+                    .mt_auto()
+                    .gap_2()
+                    .items_center()
+                    .px_1()
+                    .pt_3()
+                    .child(IconName::CircleUser)
+                    .child(cx.global::<data::DashboardData>().name.clone()),
             )
+            .into_any_element()
     }
 }
 
@@ -227,7 +305,7 @@ impl DashboardView {
 fn theme_button(cx: &mut Context<DashboardView>) -> Button {
     let dark = cx.theme().mode.is_dark();
     Button::new("theme-toggle")
-        .xsmall()
+        .small()
         .ghost()
         .icon(if dark { IconName::Sun } else { IconName::Moon })
         .tooltip(if dark { "Açık tema" } else { "Koyu tema" })
@@ -260,6 +338,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Notes => pages::notes_page(self, cx),
             Page::Pomodoro => pages::pomodoro_page(self, cx),
             Page::Settings => pages::settings_page(self, cx),
+            Page::System => pages::system_page(self, cx),
         };
 
         v_flex()
