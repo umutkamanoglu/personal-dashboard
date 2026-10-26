@@ -23,6 +23,7 @@ pub enum Page {
     Routines,
     Stats,
     Notes,
+    Pomodoro,
 }
 
 impl Page {
@@ -34,16 +35,18 @@ impl Page {
             Page::Routines => "Rutinler",
             Page::Stats => "İstatistik",
             Page::Notes => "Notlar",
+            Page::Pomodoro => "Pomodoro",
         }
     }
 
-    const ALL: [Page; 6] = [
+    const ALL: [Page; 7] = [
         Page::Home,
         Page::Schedule,
         Page::Habits,
         Page::Routines,
         Page::Stats,
         Page::Notes,
+        Page::Pomodoro,
     ];
 
     fn icon(self) -> IconName {
@@ -54,6 +57,7 @@ impl Page {
             Page::Routines => IconName::RefreshCw,
             Page::Stats => IconName::ChartPie,
             Page::Notes => IconName::FileText,
+            Page::Pomodoro => IconName::Play,
         }
     }
 }
@@ -75,6 +79,9 @@ pub struct DashboardView {
     pub(crate) note_input: Entity<InputState>,
     pub(crate) remind_input: Entity<InputState>,
     pub(crate) remind_days: [bool; 7],
+    // Pomodoro formu
+    pub(crate) pomo_label_input: Entity<InputState>,
+    pub(crate) pomo_work_idx: usize,
 }
 
 impl DashboardView {
@@ -89,16 +96,23 @@ impl DashboardView {
         let note_input = cx.new(|cx| InputState::new(window, cx).placeholder("Yeni not..."));
         let remind_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Hatırlatıcı (ör. çöp çıkar)"));
+        let pomo_label_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Ne üzerine odaklanıyorsun?"));
         let routine_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Yeni rutin ekle..."));
 
-        // her 30 saniyede saat/tarih güncellensin
+        // saniyelik tick: saat + pomodoro geri sayımı güncel kalsın
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
-                .timer(std::time::Duration::from_secs(30))
+                .timer(std::time::Duration::from_secs(1))
                 .await;
             if let Some(this) = this.upgrade() {
-                this.update(cx, |_, cx| cx.notify());
+                this.update(cx, |_, cx| {
+                    // pomodoro fazı dolduysa otomatik geçir
+                    cx.global_mut::<crate::data::DashboardData>()
+                        .advance_pomodoro();
+                    cx.notify()
+                });
             } else {
                 break;
             }
@@ -118,6 +132,8 @@ impl DashboardView {
             note_input,
             remind_input,
             remind_days: [false; 7],
+            pomo_label_input,
+            pomo_work_idx: 1,
         }
     }
 
@@ -224,6 +240,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Routines => pages::routines_page(self, window, cx),
             Page::Stats => pages::stats_page(self, cx),
             Page::Notes => pages::notes_page(self, cx),
+            Page::Pomodoro => pages::pomodoro_page(self, cx),
         };
 
         v_flex()

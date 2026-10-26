@@ -144,6 +144,26 @@ pub struct Reminder {
     pub days: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PomodoroPhase {
+    #[serde(rename = "work")]
+    Work,
+    #[serde(rename = "break")]
+    Break,
+}
+
+/// Aktif Pomodoro seansı; epoch saniyeleriyle tutulur, uygulama kapansa bile devam eder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pomodoro {
+    pub label: String,
+    pub phase: PomodoroPhase,
+    /// aktif fazın başlangıcı (unix saniye)
+    pub phase_start: i64,
+    pub work_min: u32,
+    pub break_min: u32,
+    pub rounds_done: u32,
+}
+
 /// Saat dilimi girişi: "günde hangi saatte ne var"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleEntry {
@@ -193,6 +213,9 @@ pub struct DashboardData {
     /// koyu tema mı (kaydedilir, açık tema varsayılan)
     #[serde(default)]
     pub dark_mode: bool,
+    /// aktif pomodoro seansı (yoksa None)
+    #[serde(default)]
+    pub pomodoro: Option<Pomodoro>,
 }
 
 impl DashboardData {
@@ -325,6 +348,88 @@ impl DashboardData {
         set.range(cutoff..).count() as u32
     }
 
+    // --- Pomodoro ---
+
+    fn now_epoch_secs() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+
+    /// Aktif fazın toplam süresi (saniye).
+    fn phase_secs(p: &Pomodoro) -> i64 {
+        let mins = match p.phase {
+            PomodoroPhase::Work => p.work_min,
+            PomodoroPhase::Break => p.break_min,
+        };
+        mins as i64 * 60
+    }
+
+    /// Yeni pomodoro başlatır.
+    pub fn start_pomodoro(&mut self, label: String, work_min: u32, break_min: u32) {
+        self.pomodoro = Some(Pomodoro {
+            label,
+            phase: PomodoroPhase::Work,
+            phase_start: Self::now_epoch_secs(),
+            work_min,
+            break_min,
+            rounds_done: 0,
+        });
+        self.save();
+    }
+
+    pub fn stop_pomodoro(&mut self) {
+        self.pomodoro = None;
+        self.save();
+    }
+
+    /// Aktif fazı hemen bitirip diğerine geçer (Work bitince rounds++).
+    pub fn skip_pomodoro_phase(&mut self) {
+        let Some(p) = self.pomodoro.as_mut() else {
+            return;
+        };
+        if p.phase == PomodoroPhase::Work {
+            p.rounds_done += 1;
+        }
+        p.phase = match p.phase {
+            PomodoroPhase::Work => PomodoroPhase::Break,
+            PomodoroPhase::Break => PomodoroPhase::Work,
+        };
+        p.phase_start = Self::now_epoch_secs();
+        self.save();
+    }
+
+    /// Zaman dolunca fazı otomatik geçirir (her tick'te çağrılır).
+    pub fn advance_pomodoro(&mut self) -> bool {
+        let Some(p) = self.pomodoro.as_mut() else {
+            return false;
+        };
+        let expected = Self::phase_secs(p);
+        if Self::now_epoch_secs() - p.phase_start < expected {
+            return false;
+        }
+        self.skip_pomodoro_phase();
+        // faz başlangıcını aşık süreyle kaydırmak yerine tam sınırda tut
+        if let Some(p) = self.pomodoro.as_mut() {
+            p.phase_start = Self::now_epoch_secs();
+        }
+        true
+    }
+
+    /// (faz, kalan saniye, etiket, tamamlanan tur); seans yoksa None.
+    pub fn pomodoro_remaining(&self) -> Option<(PomodoroPhase, i64, String, u32)> {
+        let p = self.pomodoro.as_ref()?;
+        let expected = Self::phase_secs(p);
+        let elapsed = Self::now_epoch_secs() - p.phase_start;
+        Some((
+            p.phase,
+            (expected - elapsed).max(0),
+            p.label.clone(),
+            p.rounds_done,
+        ))
+    }
+
     // --- Notlar & hatırlatıcılar ---
 
     pub fn add_note(&mut self, text: String) {
@@ -411,6 +516,14 @@ impl DashboardData {
             out.push((date, done, daily_total));
         }
         out
+    }
+
+    // Pomodoro test yardımı: fazın başlangıcını şimdiden `secs` saniye geriye çeker.
+    #[cfg(test)]
+    pub fn pomodoro_phase_start_shift(&mut self, secs: i64) {
+        if let Some(p) = self.pomodoro.as_mut() {
+            p.phase_start -= secs;
+        }
     }
 
     // --- Schedule (saatler) ---
@@ -604,6 +717,26 @@ mod tests {
         let r_id = data.reminders[0].id.clone();
         data.remove_reminder(&r_id);
         assert_eq!(data.reminders.len(), 1);
+    }
+
+    #[test]
+    fn pomodoro_advance_and_remaining() {
+        let mut data = DashboardData::default();
+        assert!(data.pomodoro_remaining().is_none());
+        data.start_pomodoro("test".into(), 1, 2); // 1 dk odak
+        data.pomodoro_phase_start_shift(10_000); // fazı eskiye çek
+        assert_eq!(data.pomodoro_remaining().unwrap().1, 0); // süre doldu
+                                                             // advance ile mola faza geçer, tur sayılır
+        assert!(data.advance_pomodoro());
+        let state = data.pomodoro_remaining().unwrap();
+        assert_eq!(state.0, PomodoroPhase::Break);
+        assert_eq!(state.3, 1);
+        // manuel skip: moladan odağa
+        data.skip_pomodoro_phase();
+        assert_eq!(data.pomodoro_remaining().unwrap().0, PomodoroPhase::Work);
+        // durdurunca None
+        data.stop_pomodoro();
+        assert!(data.pomodoro_remaining().is_none());
     }
 
     #[test]

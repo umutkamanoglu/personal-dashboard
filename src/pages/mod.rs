@@ -1,6 +1,7 @@
 mod habits;
 mod home;
 mod notes;
+mod pomodoro;
 mod routines;
 mod schedule;
 mod stats;
@@ -8,6 +9,7 @@ mod stats;
 pub use habits::habits_page;
 pub use home::home_page;
 pub use notes::notes_page;
+pub use pomodoro::pomodoro_page;
 pub use routines::routines_page;
 pub use schedule::schedule_page;
 pub use stats::stats_page;

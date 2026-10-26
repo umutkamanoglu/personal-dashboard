@@ -11,6 +11,7 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 - **Günlük rutinler:** her gün sıfırlanan rutin checklist'i
 - **İstatistik:** son 7 gün tamamlama sütun grafiği ve alışkanlık başına dönem geçmişi
 - **Tema:** sağ üstteki düğmeyle açık/koyu tema geçişi (tercih kaydedilir)
+- **Pomodoro:** 15/25/50 dk odak + 5 dk otomatik mola, saniyelik geri sayım, ani geçiş ve tur sayısı
 - **Notlar & hatırlatıcılar:** serbest notlar ve haftanın günlerine atanan hatırlatıcılar; bugün olanlar anasayfada zil ikonuyla listelenir
 - **Kalıcı veri:** veriler `%APPDATA%\personal-dashboard\data.json` içinde JSON olarak saklanır
 
@@ -22,4 +23,4 @@ cargo run
 
 ## Yol Haritası
 
-- Pomodoro modülü
+- haftalık/aylık özet e-postası veya dışa aktarma (ör. CSV)

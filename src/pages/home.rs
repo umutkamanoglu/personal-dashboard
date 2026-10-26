@@ -10,7 +10,7 @@ use gpui_kit::{
 
 use super::{card, progress_bar};
 use crate::app::{DashboardView, Page};
-use crate::data::{self, DashboardData};
+use crate::data::{self, DashboardData, PomodoroPhase};
 use chrono::Local;
 
 fn header_button(page: Page, cx: &mut Context<DashboardView>) -> Button {
@@ -237,7 +237,56 @@ pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
                 .child(schedule_card(&data, cx).w(px(320.)))
                 .child(habits_card(&data, cx).w(px(320.)))
                 .child(routines_card(&data, cx).w(px(320.)))
-                .child(notes_card(&data, cx).w(px(320.))),
+                .child(notes_card(&data, cx).w(px(320.)))
+                .child(pomodoro_home_card(&data, cx).w(px(320.))),
         )
         .into_any_element()
+}
+
+/// Aktif pomodoro seansını anasayfada gösterir.
+fn pomodoro_home_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let mut card = card(cx).gap_2();
+    card = card.child(card_row("Pomodoro", Page::Pomodoro, cx));
+    match data.pomodoro_remaining() {
+        None => {
+            card = card.child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .py_2()
+                    .child("Aktif seans yok."),
+            );
+        }
+        Some((phase, remaining, label, rounds)) => {
+            let is_work = phase == PomodoroPhase::Work;
+            card = card.child(
+                div()
+                    .text_2xl()
+                    .font_semibold()
+                    .text_color(if is_work {
+                        cx.theme().primary
+                    } else {
+                        cx.theme().success
+                    })
+                    .child(super::pomodoro::fmt_remaining(remaining)),
+            );
+            card = card.child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(if is_work {
+                        format!("Odak — {}", label)
+                    } else {
+                        "Mola".to_string()
+                    }),
+            );
+            card = card.child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("{} tur tamamlandı", rounds)),
+            );
+        }
+    }
+    card
 }
