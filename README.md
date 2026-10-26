@@ -6,7 +6,7 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 ## Özellikler
 
 - **Anasayfa:** saat, günün programı ve genel durum kartları ile kart grid düzeni
-- **Saatler:** günde hangi saatte ne var? gün/gün aralıklarıyla program ekleyin (Haftalık görünümü)
+- **Saatler:** günde hangi saatte ne var? haftalık zaman çizelgesi (timeline) görünümü, canlı "şimdi" çizgisi
 - **Alışkanlık takibi:** günlük, haftalık ve aylık frekansta alışkanlıklar; seri (streak) göstergesi
 - **Günlük rutinler:** her gün sıfırlanan rutin checklist'i
 - **İstatistik:** son 7 gün tamamlama sütun grafiği ve alışkanlık başına dönem geçmişi
