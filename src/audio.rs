@@ -22,8 +22,8 @@ const POLL_MS: u64 = 15;
 pub struct VisualizerState {
     /// 0..=1 normalized band seviyeleri; ses yoksa hepsi 0
     pub bars: Arc<Mutex<Vec<f32>>>,
-    /// barlar güncel mi (arka plan iş parçacığı 1 kere çağırır)
-    pub _running: AtomicUsize,
+    /// akıcı tick'te sessizlik bildirimini seyreltmek için sayaç
+    pub ticks: AtomicUsize,
     /// son hatada arka plan iş parçacığının yazdığı bilgi
     pub error: Arc<Mutex<Option<String>>>,
 }
@@ -49,13 +49,20 @@ impl VisualizerState {
     pub fn error_text(&self) -> Option<String> {
         self.error.lock().ok().and_then(|e| e.clone())
     }
+
+    /// Sessizlikte akıcı tick'i seyreltir: 8 tikte 1 true döner (~4 Hz).
+    pub fn slow_tick(&self) -> bool {
+        self.ticks
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .is_multiple_of(8)
+    }
 }
 
 /// Uygulama açılışında çağrılır: arka plan yakalama iş parçacığını başlatır.
 pub fn start() -> VisualizerState {
     let state = VisualizerState {
         bars: Arc::new(Mutex::new(vec![0.; MAX_BANDS])),
-        _running: AtomicUsize::new(1),
+        ticks: AtomicUsize::new(0),
         error: Arc::new(Mutex::new(None)),
     };
     let bars = state.bars.clone();
@@ -256,9 +263,9 @@ fn capture_loop(
                     *m /= max_mag;
                 }
                 magnitudes_to_bands(&mags32, sample_rate, &mut write_buf);
-                // smoothing: hızlı saldırı, yavaş sönüş
+                // smoothing: hızlı saldırı, yumuşak sönüş
                 for i in 0..MAX_BANDS {
-                    bands[i] = write_buf[i].max(bands[i] * 0.80);
+                    bands[i] = write_buf[i].max(bands[i] * 0.88);
                 }
             }
 

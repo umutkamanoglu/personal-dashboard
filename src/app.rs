@@ -13,6 +13,7 @@ use gpui_kit::{
     Styled as _,
 };
 
+use crate::audio;
 use crate::data;
 use crate::hardware::HardwareInfo;
 use crate::media;
@@ -136,6 +137,37 @@ impl DashboardView {
                     cx.global_mut::<HardwareInfo>().refresh_light();
                     *cx.global_mut::<media::MediaState>() = media_state;
                     cx.notify()
+                });
+            } else {
+                break;
+            }
+        })
+        .detach();
+
+        // görselleştirici ~30 fps tick: barların akıcı görünmesi için
+        // anasayfa görünürken yüksek hızda bildirir, aksi halde uyur
+        cx.spawn(async move |this, cx| loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(33))
+                .await;
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |view, cx| {
+                    if view.page != Page::Home {
+                        return;
+                    }
+                    if !cx
+                        .global::<data::DashboardData>()
+                        .home_order
+                        .iter()
+                        .any(|k| k == "visualizer")
+                    {
+                        return;
+                    }
+                    let viz = cx.global::<audio::VisualizerState>();
+                    let active = viz.snapshot(1).first().copied().unwrap_or(0.) > 0.001;
+                    if active || !viz.slow_tick() {
+                        cx.notify();
+                    }
                 });
             } else {
                 break;
