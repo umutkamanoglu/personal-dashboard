@@ -371,10 +371,35 @@ impl DashboardData {
         let path = Self::storage_path();
         // parse başarısızsa struct default'u (hepsi sıfır) devreye girer;
         // bunun yerine "{}" parse ederek alan serde default'larını kullan
-        fs::read(path)
+        let mut data = fs::read(path)
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_else(|| serde_json::from_slice(b"{}").unwrap())
+            .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
+            .unwrap_or_else(|| serde_json::from_slice(b"{}").unwrap());
+        data.sanitize();
+        data.save();
+        data
+    }
+
+    /// Eski kayıtlardan gelebilecek sıfır/boş değerleri geçerli varsayılanlara çeker.
+    fn sanitize(&mut self) {
+        if self.viz_bars == 0 {
+            self.viz_bars = 28;
+        }
+        if self.viz_color.is_empty() {
+            self.viz_color = "accent".into();
+        }
+        if self.name.is_empty() {
+            self.name = default_name();
+        }
+        if self.work_min == 0 {
+            self.work_min = default_work_min();
+        }
+        if self.break_min == 0 {
+            self.break_min = default_break_min();
+        }
+        if self.home_order.iter().any(|k| k.is_empty()) {
+            self.home_order.retain(|k| !k.is_empty());
+        }
     }
 
     pub fn save(&self) {
