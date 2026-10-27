@@ -196,39 +196,25 @@ fn notes_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit
 
 pub fn home_page(cx: &mut Context<DashboardView>) -> AnyElement {
     let data: DashboardData = cx.global::<DashboardData>().clone();
-    let now = Local::now();
 
     v_flex()
         .gap_5()
         .w_full()
         .max_w(px(900.))
-        // başlık: selamlama solda, büyük saat sağda
+        // başlık: selamlama (büyük saat artık peaclock kartında)
         .child(
-            h_flex()
-                .justify_between()
-                .items_center()
+            v_flex()
+                .gap_1()
+                .child(div().font_semibold().text_xl().child(format!(
+                    "{}, {}",
+                    data::greeting(),
+                    data.name
+                )))
                 .child(
-                    v_flex()
-                        .gap_1()
-                        .child(div().font_semibold().text_xl().child(format!(
-                            "{}, {}",
-                            data::greeting(),
-                            data.name
-                        )))
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(data::today_tr()),
-                        ),
-                )
-                .child(
-                    v_flex().gap_0().items_end().child(
-                        div()
-                            .font_semibold()
-                            .text_2xl()
-                            .child(now.format("%H:%M").to_string()),
-                    ),
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(data::today_tr()),
                 ),
         )
         // kart grid'i: kullanıcının Ayarlar'dan seçtiği sıra + genişlik
@@ -293,6 +279,7 @@ pub fn card_body(
         "network" => network_home_card(cx),
         "media" => media_home_card(cx),
         "visualizer" => visualizer_home_card(cx),
+        "peaclock" => peaclock_home_card(cx),
         _ => notes_card(data, cx),
     }
 }
@@ -992,6 +979,119 @@ fn visualizer_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
                     Some(e) => format!("Ses yakalanamadı: {}", e),
                     None => "Sistem sesi çalarken barlar hareket eder".to_string(),
                 }),
+        );
+    }
+    out
+}
+
+/// Peaclock tarzı büyük saat kartı: dev rakamlar, yanıp sönen iki nokta,
+/// opsiyonel saniye ve tarih; görünümü Ayarlar'dan özelleştirilir.
+fn peaclock_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let (h24, show_secs, blink, show_date, color_key) = {
+        let d = cx.global::<DashboardData>();
+        (
+            d.clock_24h,
+            d.clock_seconds,
+            d.clock_blink,
+            d.clock_date,
+            d.clock_color.clone(),
+        )
+    };
+    let now = Local::now();
+    let hh = if h24 {
+        now.format("%H").to_string()
+    } else {
+        now.format("%I").to_string()
+    };
+    let mm = now.format("%M").to_string();
+    let ss = now.format("%S").to_string();
+    let colon_on = !blink || (now.timestamp_millis() / 500) % 2 == 0;
+
+    let theme = cx.theme();
+    let digit_color = |i: usize| match color_key.as_str() {
+        "primary" => theme.primary,
+        "success" => theme.success,
+        "warning" => theme.warning,
+        "danger" => theme.danger,
+        // gökkuşağı: rakam sırasına göre hue sıçrar
+        "rainbow" => gpui_kit::Hsla {
+            h: (0.72 - 0.72 * ((i as f32 + 1.) / 6.)).rem_euclid(1.),
+            s: 0.85,
+            l: 0.55,
+            a: 1.,
+        },
+        _ => theme.accent,
+    };
+
+    let big = |c: &str, i: usize| {
+        div()
+            .w(px(44.))
+            .text_center()
+            .text_size(px(52.))
+            .font_semibold()
+            .text_color(digit_color(i))
+            .child(c.to_string())
+    };
+
+    let mut row = h_flex().gap(px(2.)).items_end();
+    for (i, c) in hh.chars().enumerate() {
+        row = row.child(big(&c.to_string(), i));
+    }
+    row = row.child(
+        div()
+            .text_size(px(52.))
+            .font_semibold()
+            .text_color(cx.theme().foreground)
+            .opacity(if colon_on { 1. } else { 0.12 })
+            .child(":"),
+    );
+    for (i, c) in mm.chars().enumerate() {
+        row = row.child(big(&c.to_string(), i + 2));
+    }
+    if show_secs {
+        let mut mini = h_flex().gap(px(1.)).pb(px(6.));
+        mini = mini.child(
+            div()
+                .text_size(px(20.))
+                .font_semibold()
+                .text_color(cx.theme().foreground)
+                .opacity(if colon_on { 1. } else { 0.12 })
+                .child(":"),
+        );
+        for (i, c) in ss.chars().enumerate() {
+            mini = mini.child(
+                div()
+                    .w(px(14.))
+                    .text_center()
+                    .text_size(px(20.))
+                    .font_semibold()
+                    .text_color(digit_color(i + 4))
+                    .child(c.to_string()),
+            );
+        }
+        row = row.child(mini);
+    }
+
+    let mut out = card(cx).gap_2().child(
+        h_flex()
+            .justify_between()
+            .items_center()
+            .child(div().font_semibold().text_sm().child("Saat"))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(if h24 { "24 saat" } else { "12 saat" }),
+            ),
+    );
+    out = out.child(h_flex().w_full().justify_center().py_2().child(row));
+    if show_date {
+        out = out.child(
+            div()
+                .text_center()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(data::today_tr()),
         );
     }
     out

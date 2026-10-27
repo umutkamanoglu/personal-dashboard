@@ -26,11 +26,12 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .child(theme_card(cx))
         .child(pomodoro_card(cx))
         .child(visualizer_card(cx))
+        .child(peaclock_card(cx))
         .child(home_layout_card(cx))
         .into_any_element()
 }
 
-pub const CARD_LABELS: [(&str, &str); 15] = [
+pub const CARD_LABELS: [(&str, &str); 16] = [
     ("schedule", "Bugünün programı"),
     ("habits", "Alışkanlıklar"),
     ("routines", "Rutinler"),
@@ -46,6 +47,7 @@ pub const CARD_LABELS: [(&str, &str); 15] = [
     ("network", "Ağ"),
     ("media", "Medya"),
     ("visualizer", "Görselleştirici"),
+    ("peaclock", "Büyük saat"),
 ];
 
 fn card_label(key: &str) -> &'static str {
@@ -439,6 +441,104 @@ fn visualizer_card(cx: &mut Context<DashboardView>) -> Div {
                         .checked(peaks)
                         .on_change(cx.listener(|_, checked, _, cx| {
                             cx.global_mut::<DashboardData>().set_viz_peaks(*checked);
+                            cx.notify();
+                        })),
+                ),
+        )
+}
+
+/// Büyük saat (peaclock) kartını özelleştirme: saat biçimi, saniye,
+/// yanıp sönen iki nokta, tarih satırı ve rakam rengi.
+fn peaclock_card(cx: &mut Context<DashboardView>) -> Div {
+    let (h24, secs, blink, date, color) = {
+        let d = cx.global::<DashboardData>();
+        (
+            d.clock_24h,
+            d.clock_seconds,
+            d.clock_blink,
+            d.clock_date,
+            d.clock_color.clone(),
+        )
+    };
+    let color_idx = VIZ_COLOR_OPTIONS
+        .iter()
+        .position(|o| *o == color)
+        .unwrap_or(0);
+
+    card(cx)
+        .gap_3()
+        .child(div().text_sm().font_medium().child("Büyük saat görünümü"))
+        .child(
+            h_flex()
+                .gap_6()
+                .items_center()
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Saat biçimi"),
+                        )
+                        .child(
+                            RadioGroup::new("clock-24h")
+                                .children(["24 saat", "12 saat"])
+                                .selected_index(Some(if h24 { 0 } else { 1 }))
+                                .on_change(cx.listener(|_, index, _, cx| {
+                                    cx.global_mut::<DashboardData>().set_clock_24h(*index == 0);
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Rakam rengi"),
+                        )
+                        .child(
+                            RadioGroup::new("clock-color")
+                                .children(VIZ_COLOR_LABELS)
+                                .selected_index(Some(color_idx))
+                                .on_change(cx.listener(|_, index, _, cx| {
+                                    let color = VIZ_COLOR_OPTIONS[*index];
+                                    cx.global_mut::<DashboardData>().set_clock_color(color);
+                                    cx.notify();
+                                })),
+                        ),
+                ),
+        )
+        .child(
+            h_flex()
+                .gap_4()
+                .child(
+                    Checkbox::new("clock-seconds")
+                        .label("Saniyeler")
+                        .checked(secs)
+                        .on_change(cx.listener(|_, checked, _, cx| {
+                            cx.global_mut::<DashboardData>().set_clock_seconds(*checked);
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Checkbox::new("clock-blink")
+                        .label("Yanıp sönen iki nokta")
+                        .checked(blink)
+                        .on_change(cx.listener(|_, checked, _, cx| {
+                            cx.global_mut::<DashboardData>().set_clock_blink(*checked);
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Checkbox::new("clock-date")
+                        .label("Tarih satırı")
+                        .checked(date)
+                        .on_change(cx.listener(|_, checked, _, cx| {
+                            cx.global_mut::<DashboardData>().set_clock_date(*checked);
                             cx.notify();
                         })),
                 ),

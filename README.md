@@ -15,7 +15,8 @@ UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit`
 - **Notlar & hatırlatıcılar:** serbest notlar ve haftanın günlerine atanan hatırlatıcılar; bugün olanlar anasayfada zil ikonuyla listelenir
 - **Sistem bilgisi:** CPU (model/frekans/çekirdek başına kullanım/sıcaklık), RAM, GPU (NVML üzerinden NVIDIA; kullanım/VRAM/Güç/fan), disk dolulukları, tüm sıcaklık sensörleri, **ağ (anlık indirme/yükleme hızları + oturum toplamı)** ve genel bilgisayar bilgileri — anasayfada özet kartı da var
 - **Medya kontrolü:** Windows SMTC üzerinden herhangi bir uygulamanın (Spotify, tarayıcı, Groove, VLC…) çaldığı müzik anasayfadaki kartta görünür: çalan uygulama, parça/sanatçı/album adı, kapak resmi; önce/duraklat-oynat/sonra düğmeleriyle uzaktan kontrol
-- **Ses görselleştirici (CAVA tarzı):** WASAPI loopback ile sistem sesi yakalanıp FFT ile frekans bantlarına bölünür; anasayfada bar grafik olarak canlı çizilir. Bar sayısı (16-64), bar rengi (vurgu/ana/yeşil/sarı/kırmızı/gökkuşağı), aynalanma ve tepe göstergesi ayarlardan özelleştirilir
+- **Ses görselleştirici (CAVA tarzı):** WASAPI loopback ile sistem sesi yakalanıp FFT ile frekans bantlarına bölünür; anasayfada bar grafik olarak canlı (yumuşak interpolasyonla) çizilir. Bar sayısı (16-64), bar rengi (vurgu/ana/yeşil/sarı/kırmızı/gökkuşağı), aynalanma ve tepe göstergesi ayarlardan özelleştirilir
+- **Büyük saat (Peaclock tarzı):** anasayfada dev rakamlarla duvar saati kartı; 24/12 saat biçimi, saniyeler, yanıp sönen iki nokta, tarih satırı ve rakam rengi ayarlardan seçilir
 - **Menü:** gruplu, tıklayınca açılan/kapanan alt menüler; başındaki düğmeyle simge moduna sıkıştırılabilir
 - **Ana içerik** geniş ekranda ortalanır, sağda boşluk kalmaz
 - **Kalıcı veri:** veriler `%APPDATA%\personal-dashboard\data.json` içinde JSON olarak saklanır

@@ -59,8 +59,9 @@ impl VisualizerState {
             .is_multiple_of(8)
     }
 
-    /// Çizim zeminini yumuşatan interpolasyonlu kopya: hedefe doğru
-    /// yukarı hızlı (0.55), aşağı akıcı (0.28) yakınsama; kart tikte bunu okur.
+    /// Çizim zeminini yumuşatan interpolasyonlu kopya (~60 fps tik için
+    /// ayarlı): hedefe yukarı hızlı (0.40), aşağı akıcı (0.16) yakınsama;
+    /// ham veri 15 ms'de değişse çizim her karede ara değer üretir.
     pub fn display_snapshot(&self, count: usize) -> Vec<f32> {
         let target = self.snapshot(count);
         let mut disp = match self.display.lock() {
@@ -70,7 +71,7 @@ impl VisualizerState {
                 }
                 for (i, t) in target.iter().enumerate() {
                     let cur = d[i];
-                    let k = if *t > cur { 0.55 } else { 0.28 };
+                    let k = if *t > cur { 0.40 } else { 0.16 };
                     d[i] += (t - cur) * k;
                 }
                 d.clone()

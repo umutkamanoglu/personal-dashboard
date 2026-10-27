@@ -243,10 +243,25 @@ pub struct DashboardData {
     /// bar üstlerinde tepe göstergesi
     #[serde(default = "default_viz_peaks")]
     pub viz_peaks: bool,
+    /// büyük saat (peaclock): 24 saat biçimi
+    #[serde(default = "default_viz_peaks")]
+    pub clock_24h: bool,
+    /// saniyeler gösterilsin mi
+    #[serde(default)]
+    pub clock_seconds: bool,
+    /// iki nokta yanıp sönsün mü
+    #[serde(default = "default_viz_peaks")]
+    pub clock_blink: bool,
+    /// altında tarih satırı
+    #[serde(default = "default_viz_peaks")]
+    pub clock_date: bool,
+    /// rakam rengi: accent/primary/success/warning/danger/rainbow
+    #[serde(default = "default_viz_color")]
+    pub clock_color: String,
 }
 
 /// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
-pub const HOME_CARD_KEYS: [&str; 15] = [
+pub const HOME_CARD_KEYS: [&str; 16] = [
     "schedule",
     "habits",
     "routines",
@@ -262,6 +277,7 @@ pub const HOME_CARD_KEYS: [&str; 15] = [
     "network",
     "media",
     "visualizer",
+    "peaclock",
 ];
 
 fn default_home_order() -> Vec<String> {
@@ -388,6 +404,9 @@ impl DashboardData {
         if self.viz_color.is_empty() {
             self.viz_color = "accent".into();
         }
+        if self.clock_color.is_empty() {
+            self.clock_color = "accent".into();
+        }
         if self.name.is_empty() {
             self.name = default_name();
         }
@@ -466,6 +485,43 @@ impl DashboardData {
     pub fn set_viz_peaks(&mut self, peaks: bool) {
         if self.viz_peaks != peaks {
             self.viz_peaks = peaks;
+            self.save();
+        }
+    }
+
+    // --- Büyük saat (peaclock) ---
+
+    pub fn set_clock_24h(&mut self, b: bool) {
+        if self.clock_24h != b {
+            self.clock_24h = b;
+            self.save();
+        }
+    }
+
+    pub fn set_clock_seconds(&mut self, b: bool) {
+        if self.clock_seconds != b {
+            self.clock_seconds = b;
+            self.save();
+        }
+    }
+
+    pub fn set_clock_blink(&mut self, b: bool) {
+        if self.clock_blink != b {
+            self.clock_blink = b;
+            self.save();
+        }
+    }
+
+    pub fn set_clock_date(&mut self, b: bool) {
+        if self.clock_date != b {
+            self.clock_date = b;
+            self.save();
+        }
+    }
+
+    pub fn set_clock_color(&mut self, color: &str) {
+        if self.clock_color != color {
+            self.clock_color = color.into();
             self.save();
         }
     }
