@@ -22,6 +22,8 @@ const POLL_MS: u64 = 15;
 pub struct VisualizerState {
     /// 0..=1 normalized band seviyeleri; ses yoksa hepsi 0
     pub bars: Arc<Mutex<Vec<f32>>>,
+    /// barlar güncel mi değil, interpolasyon için gösterim kopyası
+    pub display: Arc<Mutex<Vec<f32>>>,
     /// akıcı tick'te sessizlik bildirimini seyreltmek için sayaç
     pub ticks: AtomicUsize,
     /// son hatada arka plan iş parçacığının yazdığı bilgi
@@ -56,12 +58,38 @@ impl VisualizerState {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             .is_multiple_of(8)
     }
+
+    /// Çizim zeminini yumuşatan interpolasyonlu kopya: hedefe doğru
+    /// yukarı hızlı (0.55), aşağı akıcı (0.28) yakınsama; kart tikte bunu okur.
+    pub fn display_snapshot(&self, count: usize) -> Vec<f32> {
+        let target = self.snapshot(count);
+        let mut disp = match self.display.lock() {
+            Ok(mut d) => {
+                if d.len() != target.len() {
+                    *d = vec![0.; target.len()];
+                }
+                for (i, t) in target.iter().enumerate() {
+                    let cur = d[i];
+                    let k = if *t > cur { 0.55 } else { 0.28 };
+                    d[i] += (t - cur) * k;
+                }
+                d.clone()
+            }
+            Err(_) => self.snapshot(count),
+        };
+        // köşe durumu: uzunluk yine tutmadıysa hedefin kendisi
+        if disp.len() != target.len() {
+            disp = target;
+        }
+        disp
+    }
 }
 
 /// Uygulama açılışında çağrılır: arka plan yakalama iş parçacığını başlatır.
 pub fn start() -> VisualizerState {
     let state = VisualizerState {
         bars: Arc::new(Mutex::new(vec![0.; MAX_BANDS])),
+        display: Arc::new(Mutex::new(vec![0.; MAX_BANDS])),
         ticks: AtomicUsize::new(0),
         error: Arc::new(Mutex::new(None)),
     };

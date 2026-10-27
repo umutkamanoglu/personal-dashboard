@@ -899,7 +899,9 @@ fn visualizer_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
             d.viz_peaks,
         )
     };
-    let levels = cx.global::<audio::VisualizerState>().snapshot(count);
+    let levels = cx
+        .global::<audio::VisualizerState>()
+        .display_snapshot(count);
     let peak_level = levels.iter().cloned().fold(0., f32::max);
     let app_err = cx.global::<audio::VisualizerState>().error_text();
 

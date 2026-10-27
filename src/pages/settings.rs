@@ -160,21 +160,23 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
                 .text_color(cx.theme().muted_foreground)
                 .child("Eklenebilir kartlar (eklemek için kartın üzerine tıkla):"),
         );
+        // 3 sütunlu ızgara: önizleme kutuları sabit genişlikte sarar
         let weak = cx.entity().downgrade();
-        card = card.child(h_flex().gap_3().flex_wrap().items_start().children(
+        card = card.child(h_flex().gap_2().mt_1().flex_wrap().items_start().children(
             available.into_iter().map(|key| {
                 let key_str = key.to_string();
                 let weak = weak.clone();
-                h_flex()
+                v_flex()
+                    .w(px(220.))
                     .gap_1()
                     .child(
                         div()
                             .id(SharedString::from(format!("home-add-{}", key)))
                             .cursor_pointer()
-                            .w(px(300.))
-                            .max_w(px(300.))
-                            .flex()
-                            .items_stretch()
+                            .h(px(170.))
+                            .overflow_hidden()
+                            .rounded_md()
+                            .flex_grow(1.)
                             .child(crate::pages::card_body(key, &data, cx).h_full())
                             .on_click(move |_, _, cx| {
                                 let _ = weak.update(cx, |_, cx| {
