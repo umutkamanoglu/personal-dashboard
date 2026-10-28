@@ -44,6 +44,16 @@ pub struct DownloadState {
     pub jobs: Arc<Mutex<Vec<Job>>>,
     /// altyapı kurulumunda (ikili indirme) oluşan hata
     pub engine_error: Arc<Mutex<Option<String>>>,
+    /// "Bilgi Al"dan dönen son medya önizlemesi
+    pub preview: Arc<Mutex<Option<Preview>>>,
+}
+
+/// Medya önizlemesi: seçilen tür indirmeden önce başlık + kapak gösterilir.
+pub struct Preview {
+    pub url: String,
+    pub title: String,
+    pub channel: Option<String>,
+    pub thumb: Option<Arc<gpui_kit::Image>>,
 }
 
 impl DownloadState {
@@ -66,17 +76,80 @@ impl DownloadState {
 pub struct Job {
     pub url: String,
     pub audio_only: bool,
+    /// önizlemeden gelen başlık (bilgi adımı atlanmışsa None)
+    pub title: Option<String>,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// İndirme işi kuyruğa alınır; arka plan motoru sırayla işler.
-pub fn submit(url: String, audio_only: bool) {
+pub fn submit(url: String, audio_only: bool, title: Option<String>) {
     // Global gpui'de kayıtlı; gpui'nin app yazıcısı yoksa sessizce çıkar.
     let Ok(mut list) = JOBS.lock() else {
         return;
     };
-    list.push(Job { url, audio_only });
+    list.push(Job {
+        url,
+        audio_only,
+        title,
+    });
+}
+
+/// Zorunlu önizleme: bilinen bir bağlantı için medya bilgisi + kapak getirir.
+/// engelleyici (yt-dlp dump) çalışır; arka planda çağrılmalı.
+pub fn prepare_preview(url: String) -> Result<Preview, String> {
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    let libs = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("personal-dashboard")
+        .join("libs");
+    let out = dirs::download_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("personal-dashboard");
+    let dl = rt
+        .block_on(Downloader::with_new_binaries(libs, out))
+        .map_err(|e| e.to_string())?;
+    let dl = rt.block_on(dl.build()).map_err(|e| e.to_string())?;
+    let video = rt
+        .block_on(dl.fetch_video_infos(&url))
+        .map_err(|e| e.to_string())?;
+
+    let thumb = video.thumbnail.as_deref().and_then(fetch_image);
+    Ok(Preview {
+        url,
+        title: video.title.clone(),
+        channel: video.channel.clone(),
+        thumb,
+    })
+}
+
+/// Resim baytları getirir; yalnızca png/jpeg/webp görseli döndürür.
+fn fetch_image(url: &str) -> Option<Arc<gpui_kit::Image>> {
+    let bytes = reqwest::blocking::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36")
+        .build()
+        .ok()?
+        .get(url)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .ok()?
+        .bytes()
+        .ok()?;
+    let b = bytes.as_ref();
+    let format = if b.starts_with(&[0x89, b'P', b'N', b'G']) {
+        gpui_kit::ImageFormat::Png
+    } else if b.starts_with(&[0xFF, 0xD8]) {
+        gpui_kit::ImageFormat::Jpeg
+    } else if b.len() > 12 && b.starts_with(b"RIFF") && &b[8..12] == b"WEBP" {
+        gpui_kit::ImageFormat::Webp
+    } else {
+        return None;
+    };
+    Some(Arc::new(gpui_kit::Image {
+        format,
+        bytes: bytes.to_vec(),
+        id: 0,
+    }))
 }
 
 /// Global kuyruk (gpui Global'i kurulmadan önce motor döngüsü kendi kuruşunu kullanır).
@@ -109,11 +182,13 @@ fn set_entry<F: FnOnce(&mut DownloadEntry)>(entries: &Mutex<Vec<DownloadEntry>>,
 }
 
 /// Uygulama açılışında çağrılır: motor iş parçacığını başlatır.
-pub fn start() -> DownloadState {
+/// `dir_override` verildiyse dosyalar oraya kaydedilir.
+pub fn start(dir_override: Option<PathBuf>) -> DownloadState {
     let state = DownloadState {
         entries: Arc::new(Mutex::new(Vec::new())),
         jobs: Arc::new(Mutex::new(Vec::new())),
         engine_error: Arc::new(Mutex::new(None)),
+        preview: Arc::new(Mutex::new(None)),
     };
     let entries = state.entries.clone();
     let engine_error = state.engine_error.clone();
@@ -126,9 +201,15 @@ pub fn start() -> DownloadState {
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("personal-dashboard");
             let libs_dir = base.join("libs");
-            let out_dir = dirs::download_dir()
-                .unwrap_or_else(|| base.clone())
-                .join("personal-dashboard");
+            let out_dir = dir_override
+                .clone()
+                // override boş/eksikse İndirilenler\personal-dashboard
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or_else(|| {
+                    dirs::download_dir()
+                        .unwrap_or_else(|| base.clone())
+                        .join("personal-dashboard")
+                });
             let _ = std::fs::create_dir_all(&out_dir);
 
             let rt = match tokio::runtime::Runtime::new() {
@@ -206,7 +287,10 @@ pub fn start() -> DownloadState {
                         list.push(DownloadEntry {
                             id,
                             url: job.url.clone(),
-                            title: job.url.chars().take(60).collect(),
+                            title: job
+                                .title
+                                .clone()
+                                .unwrap_or_else(|| job.url.chars().take(60).collect()),
                             audio_only: job.audio_only,
                             status: DlStatus::Pending,
                             progress: 0.,
@@ -324,7 +408,15 @@ async fn run_job(
                 }
             }
             Err(e) => {
-                match cli_fallback(libs_dir, url, &clean_name(&video_title(&video)), true).await {
+                match cli_fallback(
+                    libs_dir,
+                    out_dir,
+                    url,
+                    &clean_name(&video_title(&video)),
+                    true,
+                )
+                .await
+                {
                     Ok(final_path) => set_entry(&entries, id, |en| {
                         en.status = DlStatus::Done;
                         en.progress = 1.;
@@ -356,7 +448,15 @@ async fn run_job(
                 en.file = Some(final_path.display().to_string());
             }),
             Err(e) => {
-                match cli_fallback(libs_dir, url, &clean_name(&video_title(&video)), false).await {
+                match cli_fallback(
+                    libs_dir,
+                    out_dir,
+                    url,
+                    &clean_name(&video_title(&video)),
+                    false,
+                )
+                .await
+                {
                     Ok(final_path) => set_entry(&entries, id, |en| {
                         en.status = DlStatus::Done;
                         en.progress = 1.;
@@ -370,8 +470,6 @@ async fn run_job(
             }
         }
     }
-
-    let _ = out_dir;
 }
 
 /// Dahili yt-dlp.exe fallback'i: belirli CDN'ler (ör. TikTok) TLS parmak izine
@@ -379,6 +477,7 @@ async fn run_job(
 /// Terminale dokunmaz: ikili dosyanın kendisini süreç olarak çalıştırır.
 async fn cli_fallback(
     libs_dir: &Path,
+    out_dir: &Path,
     url: &str,
     stem: &str,
     audio_only: bool,
@@ -387,14 +486,8 @@ async fn cli_fallback(
     if !exe.exists() {
         return Err("yt-dlp.exe bulunamadı".to_string());
     }
-    let dir = libs_dir
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
-    let target_dir = dirs::download_dir()
-        .unwrap_or(dir)
-        .join("personal-dashboard");
-    let _ = std::fs::create_dir_all(&target_dir);
+    let _ = std::fs::create_dir_all(out_dir);
+    let target_dir = out_dir.to_path_buf();
     let template = target_dir.join(format!("{stem}.%(ext)s"));
 
     let mut cmd = tokio::process::Command::new(&exe);

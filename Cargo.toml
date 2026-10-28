@@ -19,6 +19,7 @@ rustfft = "6"
 yt-dlp = "2.9.1"
 rfd = "0.15"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "native-tls"] }
 
 # yt-dlp modeli TikTok/özgür çıkarıcıların döndürmediği alanları zorunlu
 # bekliyor (missing field `age_limit`); kaynakta esnetilmiş yamalı kopya:

@@ -100,6 +100,12 @@ pub struct DashboardView {
     // İndirme sayfası: URL girişi + ses/vidyo tercihi
     pub(crate) download_url_input: Entity<InputState>,
     pub(crate) down_audio: bool,
+    /// "Bilgi Al" sürerken true
+    pub(crate) preparing: bool,
+    /// önizleme hatası (None = sorun yok)
+    pub(crate) preview_error: Option<String>,
+    /// veri sıfırlama onayı (ilk tık arms, ikinci siler)
+    pub(crate) reset_armed: bool,
     // Saatler timeline zoom (0.5..4)
     pub(crate) tl_zoom: f32,
     // Sol menü: grup açık mı (NAV_GROUPS sırasıyla)
@@ -235,6 +241,9 @@ impl DashboardView {
             name_input,
             download_url_input,
             down_audio: false,
+            preparing: false,
+            preview_error: None,
+            reset_armed: false,
             tl_zoom: 1.0,
             open_groups: [true; 3],
             sidebar_collapsed: false,

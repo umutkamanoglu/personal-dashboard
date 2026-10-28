@@ -11,6 +11,11 @@ use gpui_kit::*;
 
 fn main() {
     let data = data::DashboardData::load();
+    let dl_dir = data
+        .download_dir
+        .clone()
+        .map(std::path::PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty());
 
     gpui_kit::application()
         .with_assets(gpui_kit_assets::AllAssets)
@@ -19,7 +24,7 @@ fn main() {
             cx.set_global(data);
             cx.set_global(hardware::HardwareInfo::new());
             cx.set_global(media::MediaState::default());
-            cx.set_global(downloads::start());
+            cx.set_global(downloads::start(dl_dir));
             // ses görselleştirici: arka plan yakalama iş parçacığını başlat
             cx.set_global(audio::start());
 

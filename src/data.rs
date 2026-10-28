@@ -225,6 +225,9 @@ pub struct DashboardData {
     /// tema Windows/uygulama tercihini izlesin mi ("Sistem" seçeneği)
     #[serde(default)]
     pub theme_system: bool,
+    /// varsayılan kayıt klasörü (None = İndirilenler\personal-dashboard)
+    #[serde(default)]
+    pub download_dir: Option<String>,
     /// aktif pomodoro seansı (yoksa None)
     #[serde(default)]
     pub pomodoro: Option<Pomodoro>,
@@ -476,7 +479,6 @@ impl DashboardData {
     }
 
     // --- Yedekleme (dışa aktar / içe aktar) ---
-
     /// Tüm veriyi (ayarlar + takipler) seçilen JSON dosyasına yazar.
     pub fn export_to(&self, path: &PathBuf) -> Result<String, String> {
         let json = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
@@ -491,6 +493,19 @@ impl DashboardData {
         data.sanitize();
         data.save();
         Ok(data)
+    }
+
+    /// Tüm veriyi siler ve stok varsayılanlarla yeniden başlatır.
+    /// (data.json silinir; yeni açılış seed değerleri yazar.)
+    pub fn reset() -> Self {
+        let _ = fs::remove_file(Self::storage_path());
+        Self::load()
+    }
+
+    /// Varsayılan/override indirme klasörü: override yoksa İndirilenler\personal-dashboard.
+    pub fn set_download_dir(&mut self, dir: Option<String>) {
+        self.download_dir = dir.filter(|d| !d.trim().is_empty());
+        self.save();
     }
 
     // --- Görselleştirici ---

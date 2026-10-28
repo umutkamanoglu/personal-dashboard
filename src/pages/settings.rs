@@ -7,6 +7,7 @@ use gpui_kit::component::{
     radio::RadioGroup,
     v_flex, ActiveTheme, IconName, Sizable as _,
 };
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     div, px, AnyElement, Context, Div, InteractiveElement as _, IntoElement as _,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
@@ -33,6 +34,7 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .child(card_title(gpui_kit_assets::IconName::Settings2, "Ayarlar"))
         .child(row(profile_card(view, cx), theme_card(cx)))
         .child(row(pomodoro_card(cx), peaclock_card(cx)))
+        .child(row(storage_card(cx), reset_card(view, cx)))
         .child(visualizer_card(cx))
         .child(backup_card(cx))
         .child(home_layout_card(cx))
@@ -400,6 +402,122 @@ fn backup_card(cx: &mut Context<DashboardView>) -> Div {
                             .detach();
                         })),
                 ),
+        )
+}
+
+/// İndirme kayıt klasörü: dosya diyalogundan seçilir; boşsa varsayılan uygulanır.
+fn storage_card(cx: &mut Context<DashboardView>) -> Div {
+    let current = cx.global::<DashboardData>().download_dir.clone();
+    card(cx)
+        .gap_3()
+        .child(card_title(
+            gpui_kit_assets::IconName::FolderOpen,
+            "İndirme klasörü",
+        ))
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .truncate()
+                .child(current.clone().unwrap_or_default()),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child("Boşsa İndirilenler\\personal-dashboard kullanılır."),
+        )
+        .child(
+            h_flex()
+                .gap_2()
+                .child(
+                    Button::new("download-dir-pick")
+                        .small()
+                        .icon(gpui_kit_assets::IconName::FolderOpen)
+                        .label("Klasör seç…")
+                        .on_click(cx.listener(|_, _, _, cx| {
+                            cx.spawn(async move |this, cx| {
+                                let picked = cx
+                                    .background_executor()
+                                    .spawn(async {
+                                        rfd::FileDialog::new()
+                                            .set_title("İndirme klasörünü seç")
+                                            .pick_folder()
+                                    })
+                                    .await;
+                                if let Some(path) = picked {
+                                    this.update(cx, |_, cx| {
+                                        cx.global_mut::<DashboardData>()
+                                            .set_download_dir(Some(path.display().to_string()));
+                                        cx.notify();
+                                    })
+                                    .ok();
+                                }
+                            })
+                            .detach();
+                        })),
+                )
+                .when(current.is_some(), |r| {
+                    r.child(
+                        Button::new("download-dir-default")
+                            .small()
+                            .icon(gpui_kit_assets::IconName::RefreshCw)
+                            .label("Varsayılana dön")
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                cx.global_mut::<DashboardData>().set_download_dir(None);
+                                cx.notify();
+                            })),
+                    )
+                }),
+        )
+}
+
+/// Tüm veriyi siler; uygulama stok seed değerlerle yeniden açılır gibi olur.
+/// İlk tık silmeyi "arm" eder; ikinci tık gerçekten sıfırlar.
+fn reset_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
+    card(cx)
+        .gap_3()
+        .child(card_title(
+            gpui_kit_assets::IconName::CircleAlert,
+            "Veri sıfırlama",
+        ))
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(
+                    "data.json silinir: alışkanlıklar, rutinler, notlar, programlar \
+                     ve ayarlar stok başlangıç değerlerine döner.",
+                ),
+        )
+        .child(
+            Button::new("data-reset")
+                .small()
+                .danger()
+                .icon(gpui_kit_assets::IconName::Trash)
+                .label(if view.reset_armed {
+                    "Emin misin? Tekrar tıkla"
+                } else {
+                    "Sıfırla"
+                })
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    if !view.reset_armed {
+                        view.reset_armed = true;
+                        cx.notify();
+                        return;
+                    }
+                    view.reset_armed = false;
+                    let fresh = crate::data::DashboardData::reset();
+                    let dark = fresh.dark_mode;
+                    cx.set_global(fresh);
+                    let mode = if dark {
+                        gpui_kit::component::ThemeMode::Dark
+                    } else {
+                        gpui_kit::component::ThemeMode::Light
+                    };
+                    gpui_kit::component::Theme::change(mode, Some(window), cx);
+                    cx.notify();
+                })),
         )
 }
 

@@ -1,36 +1,72 @@
-# Personal Dashboard
+# ⚡ Personal Dashboard
 
-Rust + GPUI ile yazılmış kişisel dashboard uygulaması.
-UI katmanı [GPUI Kit](https://github.com/longbridge/gpui-component) (`gpui-kit` crate) üzerine kurulu.
+Rust + GPUI ile yazılmış kişisel kart arayüzü.
 
-## Özellikler
+Türkçe arayüz, sistem temasını izleyen açık/koyu tema, özelleştirilebilir kart ızgarası, medya denetimi, alışkanlık takibi, sistem sensörleri ve yt-dlp ile hızlı video/ses indirmeleri.
 
-- **Anasayfa:** saat, günün programı ve genel durum kartları ile kart grid düzeni; tüm kartlar tıklanabilir. **Kart koleksiyonu:** Ayarlar'dan kart ekle/çıkar, sırala, genişliğini seç (1/2/3 sütun — 3 = tam satır); granüler CPU/RAM/GPU/disk/sıcaklık/bilgisayar/ağ kartları da koleksiyonda; ayarlarda kartların canlı önizlemesi var, tıklayınca eklenir
+---
 
-- **Ayarlar:** kart artık grid düzeninde satır satır dizilir (profil+tema, pomodoro+büyük saat yan yana), görselleştirici ve kart koleksiyonu tam satır
-- **Saatler:** günde hangi saatte ne var? haftalık zaman çizelgesi (timeline) görünümü, canlı "şimdi" çizgisi; fare tekerleğiyle zoom (0.5×–4×)
-- **Alışkanlık takibi:** günlük, haftalık ve aylık frekansta alışkanlıklar; seri (streak) göstergesi
-- **Günlük rutinler:** her gün sıfırlanan rutin checklist'i
-- **İstatistik:** son 7 gün tamamlama sütun grafiği ve alışkanlık başına dönem geçmişi
-- **Tema:** sağ üstteki düğmeyle açık/koyu tema geçişi (tercih kaydedilir)
-- **Pomodoro:** 15/25/50 dk odak + 5 dk otomatik mola, saniyelik geri sayım, ani geçiş ve tur sayısı
-- **Notlar & hatırlatıcılar:** serbest notlar ve haftanın günlerine atanan hatırlatıcılar; bugün olanlar anasayfada zil ikonuyla listelenir
-- **Sistem bilgisi:** CPU (model/frekans/çekirdek başına kullanım/sıcaklık), RAM, GPU (NVML üzerinden NVIDIA; kullanım/VRAM/Güç/fan), disk dolulukları, tüm sıcaklık sensörleri, **ağ (anlık indirme/yükleme hızları + oturum toplamı)** ve genel bilgisayar bilgileri — anasayfada özet kartı da var
-- **Medya kontrolü:** Windows SMTC üzerinden herhangi bir uygulamanın (Spotify, tarayıcı, Groove, VLC…) çaldığı müzik anasayfadaki kartta görünür: çalan uygulama, parça/sanatçı/album adı, kapak resmi; önce/duraklat-oynat/sonra düğmeleriyle uzaktan kontrol; **ses seviyesi slider'ı** ile ana çıkış sesi anında ayarlanır (hoparlör ikonuna tıklayarak ses aç/kapa)
+## 🌟 Öne Çıkanlar
 
-- **İndirmeler (yt-dlp):** İndirmeler sayfasından YouTube, Instagram, Vimeo, TikTok ve tüm yt-dlp kaynaklarından video (en iyi kalite MP4) ya da sadece ses (MP3, 192 kbps) indirilir; yt-dlp ve ffmpeg ikili dosyaları ilk işte otomatik indirilir (kullanıcı terminal kullanmaz), ilerleme yüzdesi canlı görünür; anasayfada son işleri gösteren İndirmeler kartı da var. Dosyalar `İndirilenler\personal-dashboard` klasörüne kaydedilir
-- **Ses görselleştirici (CAVA tarzı):** WASAPI loopback ile sistem sesi yakalanıp FFT ile frekans bantlarına bölünür; anasayfada bar grafik olarak canlı (yumuşak interpolasyonla) çizilir. Bar sayısı (16-64), bar rengi (vurgu/ana/yeşil/sarı/kırmızı/gökkuşağı), aynalanma ve tepe göstergesi ayarlardan özelleştirilir
-- **Büyük saat (Peaclock tarzı):** anasayfada dev rakamlarla duvar saati kartı; 24/12 saat biçimi, saniyeler, yanıp sönen iki nokta, tarih satırı ve rakam rengi ayarlardan seçilir
-- **Menü:** gruplu, tıklayınca açılan/kapanan alt menüler; başındaki düğmeyle simge moduna sıkıştırılabilir
-- **Ana içerik** geniş ekranda ortalanır, sağda boşluk kalmaz
-- **Kalıcı veri:** veriler `%APPDATA%\personal-dashboard\data.json` içinde JSON olarak saklanır
+| | |
+|---|---|
+| 🗓️ **Anasayfa ızgarası** | Saat, program ve durum kartları. Ayarlar'da canlı önizlemeli kart koleksiyonu: ekle/çıkar, sırala, 1/2/3 sütun seç |
+| 🌗 **Tema** | Açık / Koyu / **Sistem** (Windows'un açık-koyu tercihini izler) |
+| 📅 **Saatler** | Haftalık zaman çizelgesi, canlı "şimdi" çizgisi, fare tekerleğiyle zoom (0.5×–4×) |
+| ✅ **Alışkanlıklar** | Günlük / haftalık / aylık frekansta takip, seri (streak) göstergesi |
+| 🔁 **Rutinler** | Her gün sıfırlanan günlük rutin listesi |
+| 📊 **İstatistik** | Son 7 gün tamamlama sütun grafiği + alışkanlık başına dönem geçmişi |
+| ⏱️ **Pomodoro** | 15/25/50 dk odak, otomatik mola, saniyelik geri sayım |
+| 🎵 **Medya denetimi** | SMTC ile Spotify / tarayıcı / VLC kontrolü: kapak, parça, ileri-geri, ana ses slider'ı ve mute |
+| 📥 **İndirmeler** | yt-dlp ile YouTube / Instagram / Vimeo / TikTok… MP4 veya MP3; **"Bilgi Al"** adımı kapak + başlık gösterir, sonra tür seçilir |
+| 🌈 **Görselleştirici** | WASAPI loopback + FFT ile canlı frekans barları (renk, ayna, tepe seçenekleri) |
+| 🕐 **Büyük saat** | Peaclock tarzı dev saat kartı: 24/12 sa, saniye, tarih, rakam rengi |
+| 💾 **Yedekleme** | Bütün verinin tek JSON'da dışa/içe aktarımı; veri sıfırlama (stok seed) |
 
-## Geliştirme
+## 🖥️ Sistem Bilgisi
+
+Çekirdek başına CPU kullanımı + sıcaklık · RAM · NVIDIA GPU (NVML): kullanım / VRAM / güç / fan · disk dolulukları · tüm donanım sıcaklık sensörleri · ağ (anlık indirme/yükleme hızları + oturum toplamı)
+
+## 📦 Kurulum
+
+Gereksinim: [Rust](https://rustup.rs).
 
 ```bash
-cargo run
+git clone https://github.com/umutkamanoglu/personal-dashboard
+cd personal-dashboard
+cargo run --release
 ```
 
-## Yol Haritası
+Ayarlar ve tüm takipler `%APPDATA%\personal-dashboard\data.json` dosyasına JSON olarak kaydedilir. İndirme motorunun ikili dosyaları (`yt-dlp.exe`, `ffmpeg.exe`) ilk indirmede otomatik indirilir (`%APPDATA%\personal-dashboard\libs`) — kullanıcı terminal kullanmaz. İndirme klasörü Ayarlar'dan değiştirilebilir.
 
-- haftalık/aylık özet e-postası veya dışa aktarma (ör. CSV)
+## 🏗️ Mimari
+
+```
+src/
+├── main.rs          açılış, tema ve motor kurulumu
+├── app.rs           görünüm, sayfa yönlendirme, yan menü
+├── data.rs          DashboardData: tüm kalıcılık (JSON), yedekleme/sıfırlama
+├── audio.rs         WASAPI loopback görselleştirici + ana ses (MTA COM)
+├── media.rs         SMTC medya yoklaması
+├── hardware.rs      sysinfo + NVML
+├── downloads.rs     yt-dlp indirme motoru ve CLI fallback
+└── pages/           home, schedule, habits, routines, stats,
+                     notes, pomodoro, system, downloads, settings
+```
+
+## ⚙️ İndirme Motoru
+
+Uygulama [`yt-dlp`](https://crates.io/crates/yt-dlp) crate'ini kullanır ve TikTok gibi TLS parmak izi isteyen CDN'lere karşı iki önlem içerir:
+
+- Crate, `patches/yt-dlp` içinde yamalanıp `[patch.crates-io]` ile bağlanır: bazı çıkarıcıların döndürmediği `age_limit` / `live_status` / `playable_in_embed` alanları ve format bazlı `Referer` / `cookies` başlıkları artık esnetilmiş Deserialize ile çözülür
+- Native indirme 403'e düşerse motor aynı klasördeki `yt-dlp.exe`'yi (curl_cffi chrome impersonation) süreç olarak çalıştırır — terminal görünmez, akış aynıdır
+
+## 🗺️ Yol Haritası
+
+- [ ] haftalık/aylık özet e-postası veya dışa aktarma (CSV)
+- [ ] alışkanlık için ısı haritası görünümü
+- [ ] indirme kuyruğunda yeniden sıralama ve iptal
+
+## 📜 Lisans
+
+Kişisel kullanım ve öğrenme amaçlıdır.
