@@ -1,10 +1,6 @@
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
-    button::{Button, ButtonVariants as _},
-    checkbox::Checkbox,
-    h_flex,
-    slider::Slider,
-    v_flex, ActiveTheme, IconName, Sizable as _,
+    checkbox::Checkbox, h_flex, slider::Slider, v_flex, ActiveTheme, IconName,
 };
 use gpui_kit::img;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -23,26 +19,17 @@ use crate::media::{self, MediaCmd, MediaState};
 use chrono::Local;
 use std::sync::Arc;
 
-fn header_button(page: Page, cx: &mut Context<DashboardView>) -> Button {
-    let weak = cx.entity().downgrade();
-    Button::new(SharedString::from(format!("home-open-{:?}", page)))
-        .xsmall()
-        .ghost()
-        .icon(IconName::ChevronRight)
-        .on_click(move |_, _, cx| {
-            let _ = weak.update(cx, |this, cx| {
-                this.page = page;
-                cx.notify();
-            });
-        })
-}
-
-fn card_row(title: &str, page: Page, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+fn card_row(title: &str, _page: Page, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    // kartın tamamı tıklanabilir; sağda küçük bir chevron yön verir
     h_flex()
         .justify_between()
         .items_center()
         .child(div().font_semibold().text_sm().child(title.to_string()))
-        .child(header_button(page, cx))
+        .child(
+            div()
+                .text_color(cx.theme().muted_foreground)
+                .child(IconName::ChevronRight),
+        )
 }
 
 fn schedule_card(data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
@@ -263,11 +250,7 @@ fn home_key_page(key: &str) -> Page {
 }
 
 /// Kart koleksiyonu: anahtar -> içeriği üreten fonksiyon.
-pub fn card_body(
-    key: &str,
-    data: &DashboardData,
-    cx: &mut Context<DashboardView>,
-) -> gpui_kit::Div {
+fn card_body(key: &str, data: &DashboardData, cx: &mut Context<DashboardView>) -> gpui_kit::Div {
     match key {
         "schedule" => schedule_card(data, cx),
         "habits" => habits_card(data, cx),
@@ -321,8 +304,22 @@ fn clickable(
     cx: &mut Context<DashboardView>,
 ) -> gpui_kit::AnyElement {
     let weak = cx.entity().downgrade();
+    let weak2 = weak.clone();
+    let id = SharedString::from(format!("go-{:?}", page));
+    let inner_id = SharedString::from(format!("go-inner-{:?}", page));
+    // dış katman + iç kart aynı yönlendirmeyi taşır: kartın herhangi
+    // bir yerine basmak ilgili sayfayı açar
+    let inner = inner
+        .id(inner_id)
+        .cursor_pointer()
+        .on_click(move |_, _, cx| {
+            let _ = weak2.update(cx, |this, cx| {
+                this.page = page;
+                cx.notify();
+            });
+        });
     div()
-        .id(SharedString::from(format!("go-{:?}", page)))
+        .id(id)
         .cursor_pointer()
         .flex()
         .items_stretch()

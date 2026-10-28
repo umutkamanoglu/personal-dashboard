@@ -13,7 +13,7 @@ mod weather;
 
 pub use downloads::downloads_page;
 pub use habits::habits_page;
-pub use home::{card_body, home_page};
+pub use home::home_page;
 pub use notes::notes_page;
 pub use pomodoro::pomodoro_page;
 pub use routines::routines_page;

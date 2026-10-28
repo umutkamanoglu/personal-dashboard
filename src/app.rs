@@ -545,7 +545,7 @@ impl DashboardView {
                                     div()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child("alışkanlık takibi"),
+                                        .child("kişisel panel"),
                                 ),
                         )
                         .child(toggle_btn!(IconName::PanelLeftClose)),

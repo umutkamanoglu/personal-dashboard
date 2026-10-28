@@ -94,67 +94,76 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
         "Anasayfa kartları",
     ));
 
-    // sıradaki kartlar: genişlik + sıra + çıkar
+    // 1) Görünür kartlar: ad + genişlik 1/2/3 segmanı + sıralama + kaldırma.
+    // Her şey tek satırda: "ne kadar geniş, kimin üstünde" tek bakışta.
     card = card.children(data.home_order.iter().map(|key| {
         let key = key.clone();
-        let span = data.home_card_span(&key);
-        h_flex()
-            .gap_2()
+        let span = data.home_card_span(&key).clamp(1, 3);
+        let mut row = h_flex()
+            .gap_1()
             .items_center()
             .py_1()
+            .overflow_hidden()
             .child(
-                Button::new(SharedString::from(format!("home-vis-{}", key)))
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(card_icon(&key)),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .truncate()
+                            .child(card_label(&key).to_string()),
+                    ),
+            );
+        // genişlik segmanı: 1 / 2 / 3
+        for w in [1u8, 2, 3] {
+            row = row.child(
+                Button::new(SharedString::from(format!("home-span-{}-{}", key, w)))
                     .xsmall()
-                    .ghost()
-                    .icon(IconName::Close)
-                    .tooltip("Kaldır")
-                    .on_click(cx.listener({
-                        let key = key.clone();
-                        move |_, _, _, cx| {
-                            cx.global_mut::<DashboardData>().remove_home_card(&key);
-                            cx.notify();
-                        }
-                    })),
-            )
-            .child(div().flex_1().text_sm().child(format!(
-                "{}{}",
-                card_label(&key),
-                match span {
-                    2 => " (2 sütun)",
-                    3 => " (tam satır)",
-                    _ => "",
-                }
-            )))
-            .child(
-                Button::new(SharedString::from(format!("home-span-{}", key)))
-                    .xsmall()
-                    .ghost()
-                    .label(match span {
-                        2 => "2 sütun",
-                        3 => "3 sütun",
-                        _ => "1 sütun",
+                    .when(span == w, |b| {
+                        b.primary().label(match w {
+                            1 => "1",
+                            2 => "2",
+                            _ => "3",
+                        })
                     })
-                    .tooltip("Genişliği değiştir")
+                    .when(span != w, |b| {
+                        b.ghost().label(match w {
+                            1 => "1",
+                            2 => "2",
+                            _ => "3",
+                        })
+                    })
+                    .tooltip(match w {
+                        1 => "Yarım sütun",
+                        2 => "Tam sütun",
+                        _ => "Satırın tamamı",
+                    })
                     .on_click(cx.listener({
                         let key = key.clone();
                         move |_, _, _, cx| {
-                            let span = cx.global::<DashboardData>().home_card_span(&key);
-                            let next = match span {
-                                1 => 2,
-                                2 => 3,
-                                _ => 1,
-                            };
-                            cx.global_mut::<DashboardData>().set_home_span(&key, next);
+                            cx.global_mut::<DashboardData>().set_home_span(&key, w);
                             cx.notify();
                         }
                     })),
-            )
+            );
+        }
+        row = row
             .child(
                 Button::new(SharedString::from(format!("home-up-{}", key)))
                     .xsmall()
                     .ghost()
                     .icon(IconName::ArrowUp)
-                    .tooltip("Yukarı")
+                    .tooltip("Yukarı taşı")
                     .on_click(cx.listener({
                         let key = key.clone();
                         move |_, _, _, cx| {
@@ -168,7 +177,7 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
                     .xsmall()
                     .ghost()
                     .icon(IconName::ArrowDown)
-                    .tooltip("Aşağı")
+                    .tooltip("Aşağı taşı")
                     .on_click(cx.listener({
                         let key = key.clone();
                         move |_, _, _, cx| {
@@ -177,59 +186,106 @@ fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
                         }
                     })),
             )
+            .child(
+                Button::new(SharedString::from(format!("home-vis-{}", key)))
+                    .xsmall()
+                    .ghost()
+                    .text_color(cx.theme().danger)
+                    .icon(IconName::Close)
+                    .tooltip("Anasayfadan kaldır")
+                    .on_click(cx.listener({
+                        let key = key.clone();
+                        move |_, _, _, cx| {
+                            cx.global_mut::<DashboardData>().remove_home_card(&key);
+                            cx.notify();
+                        }
+                    })),
+            );
+        row
     }));
 
-    // koleksiyondan eklenebilir kartlar: canlı önizleme, tıkla-ekle
+    // 2) Eklenebilir kartlar: kompakt chip listesi (+ ile) — önizlemeden daha hızlı
     let available = data.home_cards_available();
     if !available.is_empty() {
-        card = card.child(
-            div()
-                .mt_2()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .child("Eklenebilir kartlar (eklemek için kartın üzerine tıkla):"),
-        );
-        // 3 sütunlu ızgara: önizleme kutuları sabit genişlikte sarar
-        let weak = cx.entity().downgrade();
-        card = card.child(h_flex().gap_2().mt_1().flex_wrap().items_start().children(
-            available.into_iter().map(|key| {
-                let key_str = key.to_string();
-                let weak = weak.clone();
-                v_flex()
-                    .w(px(220.))
-                    .gap_1()
-                    .child(
+        card = card
+            .child(
+                div()
+                    .mt_2()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Eklenebilir kartlar — çıkarırsan buraya döner:"),
+            )
+            .child(
+                h_flex()
+                    .gap_2()
+                    .flex_wrap()
+                    .items_start()
+                    .children(available.into_iter().map(|key| {
+                        let key_str = key.to_string();
                         div()
                             .id(SharedString::from(format!("home-add-{}", key)))
                             .cursor_pointer()
-                            .h(px(170.))
-                            .overflow_hidden()
-                            .rounded_md()
-                            .flex_grow(1.)
-                            .child(crate::pages::card_body(key, &data, cx).h_full())
-                            .on_click(move |_, _, cx| {
-                                let _ = weak.update(cx, |_, cx| {
-                                    cx.global_mut::<DashboardData>().add_home_card(key);
+                            .px_2()
+                            .py_1()
+                            .gap_2()
+                            .rounded_full()
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .flex()
+                            .items_center()
+                            .text_sm()
+                            .hover(|s| {
+                                s.bg(cx.theme().accent.opacity(0.35))
+                                    .text_color(cx.theme().accent_foreground)
+                            })
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(gpui_kit_assets::IconName::Plus),
+                            )
+                            .child(card_icon(key))
+                            .child(card_label(key).to_string())
+                            .on_click(cx.listener({
+                                let key_str = key_str.clone();
+                                move |_, _, _, cx| {
+                                    cx.global_mut::<DashboardData>().add_home_card(&key_str);
                                     cx.notify();
-                                });
-                            }),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("+ {} ekle", card_label(&key_str))),
-                    )
-            }),
-        ));
+                                }
+                            }))
+                    })),
+            );
     }
 
     card.child(
-        div()
-            .text_xs()
-            .text_color(cx.theme().muted_foreground)
-            .child("Geniş 2 sütunun tamamını kaplar; 1 sütun kartlar yan yana dizilir. Her satırdaki kartlar aynı uzunlukta uzar."),
+        div().text_xs().text_color(cx.theme().muted_foreground).child(
+            "Genişlik: 1 = yarım, 2 = tam sütun, 3 = satırın tamamı. Sıradaki kart yukarıdan aşağı dizilir.",
+        ),
     )
+}
+
+/// Kart koleksiyonu anahtarına göre küçük simge (ayar listesi + chip'ler için).
+fn card_icon(key: &str) -> gpui_kit_assets::IconName {
+    use gpui_kit_assets::IconName as I;
+    match key {
+        "schedule" => I::Calendar,
+        "habits" => I::CircleCheck,
+        "routines" => I::RefreshCw,
+        "notes" => I::FileText,
+        "pomodoro" => I::Play,
+        "cpu" | "system" => I::Cpu,
+        "ram" => I::MemoryStick,
+        "gpu" => I::MonitorCog,
+        "disks" => I::HardDrive,
+        "temps" => I::Thermometer,
+        "general" => I::Monitor,
+        "network" => I::Wifi,
+        "media" => I::Music,
+        "downloads" => I::Download,
+        "visualizer" => I::AudioLines,
+        "peaclock" => I::Clock,
+        "weather" => I::CloudSun,
+        _ => I::LayoutDashboard,
+    }
 }
 
 fn profile_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
@@ -346,21 +402,17 @@ fn backup_card(cx: &mut Context<DashboardView>) -> Div {
                         .label("Dışa aktar…")
                         .on_click(cx.listener(|_, _, _, cx| {
                             let snapshot = cx.global::<DashboardData>().clone();
-                            cx.spawn(async move |_, cx| {
-                                let saved = cx
-                                    .background_executor()
-                                    .spawn(async move {
-                                        rfd::FileDialog::new()
-                                            .set_title("Yedeği dışa aktar")
-                                            .set_file_name("personal-dashboard-yedek.json")
-                                            .add_filter("JSON", &["json"])
-                                            .save_file()
-                                            .map(|p| snapshot.export_to(&p))
-                                    })
+                            cx.spawn(async move |_, _cx| {
+                                let saved = rfd::AsyncFileDialog::new()
+                                    .set_title("Yedeği dışa aktar")
+                                    .set_file_name("personal-dashboard-yedek.json")
+                                    .add_filter("JSON", &["json"])
+                                    .save_file()
                                     .await;
-                                if let Some(Ok(_path)) = saved {
-                                    // dışa aktarım sessizde tamam; dosya yolu diyalogda görülür
-                                }
+                                // dosya seçildi: içeriği yaz (handle.path() senkron)
+                                let _ = saved.map(|h| {
+                                    snapshot.export_to(&std::path::PathBuf::from(h.path()))
+                                });
                             })
                             .detach();
                         })),
@@ -372,35 +424,41 @@ fn backup_card(cx: &mut Context<DashboardView>) -> Div {
                         .label("İçe aktar…")
                         .on_click(cx.listener(|_, _, _, cx| {
                             cx.spawn(async move |this, cx| {
-                                let loaded = cx
+                                let picked = rfd::AsyncFileDialog::new()
+                                    .set_title("Yedeği içe aktar")
+                                    .add_filter("JSON", &["json"])
+                                    .pick_file()
+                                    .await;
+                                let Some(file) = picked else {
+                                    return;
+                                };
+                                let path = std::path::PathBuf::from(file.path());
+                                let imported = cx
                                     .background_executor()
                                     .spawn(async move {
-                                        rfd::FileDialog::new()
-                                            .set_title("Yedeği içe aktar")
-                                            .add_filter("JSON", &["json"])
-                                            .pick_file()
-                                            .map(|p| DashboardData::import_from(&p))
+                                        DashboardData::import_from(&path)
                                     })
                                     .await;
-                                if let Some(result) = loaded {
-                                    this.update(cx, |_, cx| match result {
-                                        Ok(data) => {
-                                            let dark = data.dark_mode;
-                                            cx.set_global(data);
-                                            let mode = if dark {
-                                                gpui_kit::component::ThemeMode::Dark
-                                            } else {
-                                                gpui_kit::component::ThemeMode::Light
-                                            };
-                                            gpui_kit::component::Theme::change(mode, None, cx);
-                                            cx.notify();
+                                this.update(cx, |_, cx| {
+                                    if let Ok(data) = imported {
+                                        let dark = data.dark_mode;
+                                        cx.set_global(data);
+                                        let mode = if dark {
+                                            gpui_kit::component::ThemeMode::Dark
+                                        } else {
+                                            gpui_kit::component::ThemeMode::Light
+                                        };
+                                        gpui_kit::component::Theme::change(mode, None, cx);
+                                        // hava durumu önbelleğini de tazele
+                                        if let Ok(mut u) =
+                                            cx.global::<crate::weather::WeatherState>().updated.lock()
+                                        {
+                                            *u = None;
                                         }
-                                        Err(_) => {
-                                            // bozuk/uyumsuz yedek: sessizce yoksay
-                                        }
-                                    })
-                                    .ok();
-                                }
+                                    }
+                                    cx.notify();
+                                })
+                                .ok();
                             })
                             .detach();
                         })),
@@ -536,22 +594,18 @@ fn storage_card(cx: &mut Context<DashboardView>) -> Div {
                         .label("Klasör seç…")
                         .on_click(cx.listener(|_, _, _, cx| {
                             cx.spawn(async move |this, cx| {
-                                let picked = cx
-                                    .background_executor()
-                                    .spawn(async {
-                                        rfd::FileDialog::new()
-                                            .set_title("İndirme klasörünü seç")
-                                            .pick_folder()
-                                    })
+                                let picked = rfd::AsyncFileDialog::new()
+                                    .set_title("İndirme klasörünü seç")
+                                    .pick_folder()
                                     .await;
-                                if let Some(path) = picked {
-                                    this.update(cx, |_, cx| {
-                                        cx.global_mut::<DashboardData>()
-                                            .set_download_dir(Some(path.display().to_string()));
-                                        cx.notify();
-                                    })
-                                    .ok();
-                                }
+                                let Some(file) = picked else { return };
+                                let path = file.path().to_path_buf();
+                                this.update(cx, |_, cx| {
+                                    cx.global_mut::<DashboardData>()
+                                        .set_download_dir(Some(path.display().to_string()));
+                                    cx.notify();
+                                })
+                                .ok();
                             })
                             .detach();
                         })),
