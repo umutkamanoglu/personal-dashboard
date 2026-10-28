@@ -19,5 +19,10 @@ rustfft = "6"
 yt-dlp = "2.9.1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
 
+# yt-dlp modeli TikTok/özgür çıkarıcıların döndürmediği alanları zorunlu
+# bekliyor (missing field `age_limit`); kaynakta esnetilmiş yamalı kopya:
+[patch.crates-io]
+yt-dlp = { path = "patches/yt-dlp" }
+
 [profile.release]
 lto = "thin"

@@ -5,11 +5,11 @@
 //! runtime'ında sırayla işlenir; durumlar gpui Global'i (`DownloadState`)
 //! üzerinden arayüze aktarılır.
 
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use yt_dlp::client::deps::Libraries;
 use yt_dlp::download::config::postprocess::{AudioCodec, PostProcessConfig};
 use yt_dlp::model::Video;
 use yt_dlp::Downloader;
@@ -143,18 +143,35 @@ pub fn start() -> DownloadState {
 
             // tek runtime'da tüm indirmeler sırayla
             rt.block_on(async {
-                // altyapıyı başta kur (yoksa yt-dlp + ffmpeg ağdan iner)
-                let libraries = Libraries::new(libs_dir.join("yt-dlp"), libs_dir.join("ffmpeg"));
-                let downloader = match Downloader::builder(libraries, out_dir.clone())
+                // altyapıyı başta kur: yoksa yt-dlp + ffmpeg ikili dosyaları
+                // ağdan otomatik iner (LibraryInstaller), varsa aynen kullanılır
+                let builder =
+                    match Downloader::with_new_binaries(libs_dir.clone(), out_dir.clone()).await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            if let Ok(mut s) = engine_error.lock() {
+                                *s = Some(format!("yt-dlp kurulumu: {e}"));
+                            }
+                            // motor olmadan iş kabul edemeyiz; gelen işleri hata yaparız
+                            loop {
+                                drain_jobs_to_error(&entries, &engine_error).await;
+                                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            }
+                        }
+                    };
+                let downloader = match builder
+                    .with_user_agent(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+                         (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    )
                     .build()
                     .await
                 {
                     Ok(d) => d,
                     Err(e) => {
                         if let Ok(mut s) = engine_error.lock() {
-                            *s = Some(format!("yt-dlp kurulumu: {e}"));
+                            *s = Some(format!("yt-dlp hazırlığı: {e}"));
                         }
-                        // motor olmadan yine iş kabul etmeyelim; kuyruğu hata yaparız
                         loop {
                             drain_jobs_to_error(&entries, &engine_error).await;
                             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -201,6 +218,7 @@ pub fn start() -> DownloadState {
                     run_job(
                         &downloader,
                         &out_dir,
+                        &libs_dir,
                         id,
                         &job.url,
                         job.audio_only,
@@ -250,9 +268,11 @@ async fn drain_jobs_to_error(
 }
 
 /// Tek iş: bilgiyi al, indir (vidyo) ya da ses çıkarıp mp3'e dönüştür.
+#[allow(clippy::too_many_arguments)]
 async fn run_job(
     downloader: &Downloader,
     out_dir: &PathBuf,
+    libs_dir: &PathBuf,
     id: u64,
     url: &str,
     audio_only: bool,
@@ -303,10 +323,19 @@ async fn run_job(
                     }),
                 }
             }
-            Err(e) => set_entry(&entries, id, |en| {
-                en.status = DlStatus::Failed;
-                en.error = Some(format!("ses akışı: {e}"));
-            }),
+            Err(e) => {
+                match cli_fallback(libs_dir, url, &clean_name(&video_title(&video)), true).await {
+                    Ok(final_path) => set_entry(&entries, id, |en| {
+                        en.status = DlStatus::Done;
+                        en.progress = 1.;
+                        en.file = Some(final_path.display().to_string());
+                    }),
+                    Err(_fb) => set_entry(&entries, id, |en| {
+                        en.status = DlStatus::Failed;
+                        en.error = Some(format!("ses akışı: {e}"));
+                    }),
+                }
+            }
         }
     } else {
         // vidyo: en iyi kalite + canlı yüzde (ilerleme geri araması)
@@ -326,14 +355,97 @@ async fn run_job(
                 en.progress = 1.;
                 en.file = Some(final_path.display().to_string());
             }),
-            Err(e) => set_entry(&entries, id, |en| {
-                en.status = DlStatus::Failed;
-                en.error = Some(format!("indirme: {e}"));
-            }),
+            Err(e) => {
+                match cli_fallback(libs_dir, url, &clean_name(&video_title(&video)), false).await {
+                    Ok(final_path) => set_entry(&entries, id, |en| {
+                        en.status = DlStatus::Done;
+                        en.progress = 1.;
+                        en.file = Some(final_path.display().to_string());
+                    }),
+                    Err(_fb) => set_entry(&entries, id, |en| {
+                        en.status = DlStatus::Failed;
+                        en.error = Some(format!("indirme: {e}"));
+                    }),
+                }
+            }
         }
     }
 
     let _ = out_dir;
+}
+
+/// Dahili yt-dlp.exe fallback'i: belirli CDN'ler (ör. TikTok) TLS parmak izine
+/// bakıp reqwest'e 403 döndürür; CLI ikilisi curl_cffi impersonation ile başarılı.
+/// Terminale dokunmaz: ikili dosyanın kendisini süreç olarak çalıştırır.
+async fn cli_fallback(
+    libs_dir: &PathBuf,
+    url: &str,
+    stem: &str,
+    audio_only: bool,
+) -> Result<PathBuf, String> {
+    let exe = libs_dir.join("yt-dlp.exe");
+    if !exe.exists() {
+        return Err("yt-dlp.exe bulunamadı".to_string());
+    }
+    let dir = libs_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let target_dir = dirs::download_dir()
+        .unwrap_or(dir)
+        .join("personal-dashboard");
+    let _ = std::fs::create_dir_all(&target_dir);
+    let template = target_dir.join(format!("{stem}.%(ext)s"));
+
+    let mut cmd = tokio::process::Command::new(&exe);
+    if audio_only {
+        cmd.arg("-x")
+            .arg("--audio-format")
+            .arg("mp3")
+            .arg("--audio-quality")
+            .arg("192K");
+    } else {
+        cmd.arg("-N")
+            .arg("4")
+            .arg("-f")
+            .arg("bestvideo*+bestaudio/best");
+    }
+    cmd.arg("--ffmpeg-location")
+        .arg(libs_dir.join("ffmpeg.exe"))
+        .arg("--no-playlist")
+        .arg("--no-part")
+        .arg("-o")
+        .arg(&template)
+        .arg(url);
+
+    let out = cmd
+        .stdin(std::process::Stdio::null())
+        .output()
+        .await
+        .map_err(|e| format!("çalıştırma: {e}"))?;
+    if !out.status.success() {
+        let tail = String::from_utf8_lossy(&out.stderr);
+        let tail: Vec<&str> = tail.lines().rev().take(3).collect();
+        let tail = tail.into_iter().rev().collect::<Vec<_>>().join(" | ");
+        return Err(format!("yt-dlp (fallback): {tail}"));
+    }
+
+    // `<stem>.<ext>` üretildi; birebir eşleşen en yeni dosyayı bul
+    let mut found: Option<PathBuf> = None;
+    if let Ok(rd) = std::fs::read_dir(&target_dir) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with(stem)
+                && found.as_ref().is_none_or(|f| {
+                    e.metadata().ok().and_then(|m| m.modified().ok())
+                        > std::fs::metadata(f).ok().and_then(|m| m.modified().ok())
+                })
+            {
+                found = Some(e.path());
+            }
+        }
+    }
+    found.ok_or_else(|| "dosya bulunamadı (fallback)".to_string())
 }
 
 fn video_title(video: &Video) -> String {
