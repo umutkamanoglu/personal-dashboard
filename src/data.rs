@@ -230,6 +230,15 @@ pub struct DashboardData {
     /// varsayılan kayıt klasörü (None = İndirilenler\personal-dashboard)
     #[serde(default)]
     pub download_dir: Option<String>,
+    /// hava durumu konumu (şehir adı; "" = seçilmemiş)
+    #[serde(default)]
+    pub weather_location: String,
+    /// hava sağlayıcısı: "open-meteo" (anahtar gerekmez) / "openweathermap"
+    #[serde(default = "default_weather_provider")]
+    pub weather_provider: String,
+    /// sağlayıcı -> API anahtarı (openweathermap için gerekli)
+    #[serde(default)]
+    pub weather_api_keys: HashMap<String, String>,
     /// aktif pomodoro seansı (yoksa None)
     #[serde(default)]
     pub pomodoro: Option<Pomodoro>,
@@ -269,7 +278,7 @@ pub struct DashboardData {
 }
 
 /// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
-pub const HOME_CARD_KEYS: [&str; 17] = [
+pub const HOME_CARD_KEYS: [&str; 18] = [
     "schedule",
     "habits",
     "routines",
@@ -287,6 +296,7 @@ pub const HOME_CARD_KEYS: [&str; 17] = [
     "downloads",
     "visualizer",
     "peaclock",
+    "weather",
 ];
 
 fn default_home_order() -> Vec<String> {
@@ -382,6 +392,9 @@ fn default_work_min() -> u32 {
 }
 fn default_break_min() -> u32 {
     5
+}
+fn default_weather_provider() -> String {
+    "open-meteo".into()
 }
 
 impl DashboardData {
@@ -507,6 +520,24 @@ impl DashboardData {
     /// Varsayılan/override indirme klasörü: override yoksa İndirilenler\personal-dashboard.
     pub fn set_download_dir(&mut self, dir: Option<String>) {
         self.download_dir = dir.filter(|d| !d.trim().is_empty());
+        self.save();
+    }
+
+    // --- Hava durumu ---
+
+    pub fn set_weather_location(&mut self, loc: String) {
+        self.weather_location = loc.trim().to_string();
+        self.save();
+    }
+
+    pub fn set_weather_provider(&mut self, provider: String) {
+        self.weather_provider = provider;
+        self.save();
+    }
+
+    pub fn set_weather_api_key(&mut self, provider: &str, key: String) {
+        self.weather_api_keys
+            .insert(provider.to_string(), key.trim().to_string());
         self.save();
     }
 

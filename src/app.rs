@@ -33,6 +33,7 @@ pub enum Page {
     Settings,
     System,
     Downloads,
+    Weather,
 }
 
 impl Page {
@@ -48,6 +49,7 @@ impl Page {
             Page::Settings => "Ayarlar",
             Page::System => "Sistem",
             Page::Downloads => "İndirmeler",
+            Page::Weather => "Hava",
         }
     }
 
@@ -63,6 +65,7 @@ impl Page {
             Page::Settings => gpui_kit_assets::IconName::Settings2,
             Page::System => gpui_kit_assets::IconName::Cpu,
             Page::Downloads => gpui_kit_assets::IconName::Download,
+            Page::Weather => gpui_kit_assets::IconName::CloudSun,
         }
     }
 }
@@ -71,7 +74,13 @@ impl Page {
 const NAV_GROUPS: [(&str, &[Page]); 3] = [
     (
         "Genel",
-        &[Page::Home, Page::System, Page::Downloads, Page::Settings],
+        &[
+            Page::Home,
+            Page::System,
+            Page::Weather,
+            Page::Downloads,
+            Page::Settings,
+        ],
     ),
     ("Takip", &[Page::Habits, Page::Routines, Page::Stats]),
     ("Zaman", &[Page::Schedule, Page::Notes, Page::Pomodoro]),
@@ -106,8 +115,13 @@ pub struct DashboardView {
     pub(crate) preview_error: Option<String>,
     /// veri sıfırlama onayı (ilk tık arms, ikinci siler)
     pub(crate) reset_armed: bool,
+    /// hava durumu: konum girişi + API anahtarı girişi (Ayarlar)
+    pub(crate) weather_loc_input: Entity<InputState>,
+    pub(crate) weather_key_input: Entity<InputState>,
     // Saatler timeline zoom (0.5..4)
     pub(crate) tl_zoom: f32,
+    /// açık ısı haritası olan alışkanlık id (None = harita kapalı)
+    pub(crate) heat_habit: Option<String>,
     // Sol menü: grup açık mı (NAV_GROUPS sırasıyla)
     pub(crate) open_groups: [bool; 3],
     // Sol menü: simge moduna sıkıştırılmış mı
@@ -158,6 +172,28 @@ impl DashboardView {
         .detach();
         let download_url_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("YouTube / Instagram / Vimeo…"));
+        let weather_loc_input = cx.new(|cx| {
+            let mut st = InputState::new(window, cx);
+            st.set_value(
+                cx.global::<data::DashboardData>().weather_location.clone(),
+                window,
+                cx,
+            );
+            st
+        });
+        let weather_key_input = cx.new(|cx| {
+            let mut st = InputState::new(window, cx);
+            st.set_value(
+                cx.global::<data::DashboardData>()
+                    .weather_api_keys
+                    .get("openweathermap")
+                    .cloned()
+                    .unwrap_or_default(),
+                window,
+                cx,
+            );
+            st
+        });
 
         // saniyelik tick: saat + pomodoro + donanım güncellensin
         cx.spawn(async move |this, cx| loop {
@@ -170,7 +206,7 @@ impl DashboardView {
                     .background_executor()
                     .spawn(async { media::poll() })
                     .await;
-                this.update(cx, |_, cx| {
+                let need = this.update(cx, |view, cx| {
                     // pomodoro fazı dolduysa otomatik geçir
                     cx.global_mut::<data::DashboardData>().advance_pomodoro();
                     // donanım: CPU/RAM her saniye, sıcaklıklar seyrek (hardware içinden)
@@ -179,8 +215,66 @@ impl DashboardView {
                     let keep_slider = cx.global::<media::MediaState>().volume_slider.clone();
                     *cx.global_mut::<media::MediaState>() = media_state;
                     cx.global_mut::<media::MediaState>().volume_slider = keep_slider;
-                    cx.notify()
+                    cx.notify();
+                    // hava durumu: ilgili sayfa/kart görünürse + 10 dk geçtiyse yenile
+                    let last = cx
+                        .global::<crate::weather::WeatherState>()
+                        .updated
+                        .lock()
+                        .ok()
+                        .and_then(|u| *u);
+                    let stale = last
+                        .map(|t| t.elapsed() > std::time::Duration::from_secs(600))
+                        .unwrap_or(true);
+                    let want = view.page == Page::Weather
+                        || cx
+                            .global::<data::DashboardData>()
+                            .home_order
+                            .iter()
+                            .any(|k| k == "weather");
+                    if !want || !stale {
+                        return None;
+                    }
+                    let data = cx.global::<data::DashboardData>();
+                    let provider = data.weather_provider.clone();
+                    let key = data
+                        .weather_api_keys
+                        .get(provider.as_str())
+                        .cloned()
+                        .unwrap_or_default();
+                    Some((data.weather_location.clone(), provider, key))
                 });
+                if let Some((place, provider, key)) = need {
+                    let result = cx
+                        .background_executor()
+                        .spawn(
+                            async move { crate::weather::fetch_weather(&place, &provider, &key) },
+                        )
+                        .await;
+                    this.update(cx, |_, cx| {
+                        let now = std::time::Instant::now();
+                        let state = cx.global_mut::<crate::weather::WeatherState>();
+                        match result {
+                            Ok(w) => {
+                                if let Ok(mut d) = state.data.lock() {
+                                    *d = Some(w);
+                                }
+                                if let Ok(mut e) = state.error.lock() {
+                                    *e = None;
+                                }
+                            }
+                            Err(e) => {
+                                if let Ok(mut er) = state.error.lock() {
+                                    *er = Some(e);
+                                }
+                            }
+                        }
+                        if let Ok(mut u) = state.updated.lock() {
+                            *u = Some(now);
+                        }
+                        cx.notify();
+                    });
+                }
             } else {
                 break;
             }
@@ -244,7 +338,10 @@ impl DashboardView {
             preparing: false,
             preview_error: None,
             reset_armed: false,
+            weather_loc_input,
+            weather_key_input,
             tl_zoom: 1.0,
+            heat_habit: None,
             open_groups: [true; 3],
             sidebar_collapsed: false,
         }
@@ -509,6 +606,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Settings => pages::settings_page(self, cx),
             Page::System => pages::system_page(self, cx),
             Page::Downloads => pages::downloads_page(self, cx),
+            Page::Weather => pages::weather_page(self, cx),
         };
 
         v_flex()

@@ -5,6 +5,7 @@ mod downloads;
 mod hardware;
 mod media;
 mod pages;
+mod weather;
 
 use gpui_kit::component::TitleBar;
 use gpui_kit::*;
@@ -25,6 +26,7 @@ fn main() {
             cx.set_global(hardware::HardwareInfo::new());
             cx.set_global(media::MediaState::default());
             cx.set_global(downloads::start(dl_dir));
+            cx.set_global(weather::WeatherState::default());
             // ses görselleştirici: arka plan yakalama iş parçacığını başlat
             cx.set_global(audio::start());
 
@@ -43,6 +45,8 @@ fn main() {
             let mut window_options = TitleBar::window_options();
             window_options.window_bounds =
                 Some(WindowBounds::centered(size(px(1120.), px(760.)), cx));
+            // tasarımın bozulmaması için alt sınır (daha küçük açılamaz/küçültülemez)
+            window_options.window_min_size = Some(size(px(940.), px(600.)));
 
             gpui_kit::open_window(window_options, cx, |window, cx| {
                 cx.new(|cx| app::DashboardView::new(window, cx))

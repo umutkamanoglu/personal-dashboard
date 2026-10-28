@@ -20,6 +20,7 @@ Türkçe arayüz, sistem temasını izleyen açık/koyu tema, özelleştirilebil
 | 🎵 **Medya denetimi** | SMTC ile Spotify / tarayıcı / VLC kontrolü: kapak, parça, ileri-geri, ana ses slider'ı ve mute |
 | 📥 **İndirmeler** | yt-dlp ile YouTube / Instagram / Vimeo / TikTok… MP4 veya MP3; **"Bilgi Al"** adımı kapak + başlık gösterir, sonra tür seçilir |
 | 🌈 **Görselleştirici** | WASAPI loopback + FFT ile canlı frekans barları (renk, ayna, tepe seçenekleri) |
+| ⛅ **Hava durumu** | Anlık durum + saatlik + 5 günlük tahmin kartları; Open-Meteo (anahtarsız) veya OpenWeatherMap (anahtar Ayarlar'dan) |
 | 🕐 **Büyük saat** | Peaclock tarzı dev saat kartı: 24/12 sa, saniye, tarih, rakam rengi |
 | 💾 **Yedekleme** | Bütün verinin tek JSON'da dışa/içe aktarımı; veri sıfırlama (stok seed) |
 
@@ -64,7 +65,8 @@ Uygulama [`yt-dlp`](https://crates.io/crates/yt-dlp) crate'ini kullanır ve TikT
 ## 🗺️ Yol Haritası
 
 - [ ] haftalık/aylık özet e-postası veya dışa aktarma (CSV)
-- [ ] alışkanlık için ısı haritası görünümü
+- [x] alışkanlık için ısı haritası görünümü
+- [x] hava durumu kartları (open-meteo / OpenWeatherMap, konum + anahtar ayarları)
 - [ ] indirme kuyruğunda yeniden sıralama ve iptal
 
 ## 📜 Lisans

@@ -257,6 +257,7 @@ fn home_key_page(key: &str) -> Page {
         "notes" => Page::Notes,
         "pomodoro" => Page::Pomodoro,
         "downloads" => Page::Downloads,
+        "weather" => Page::Weather,
         _ => Page::System,
     }
 }
@@ -285,6 +286,7 @@ pub fn card_body(
         "downloads" => downloads_home_card(cx),
         "visualizer" => visualizer_home_card(cx),
         "peaclock" => peaclock_home_card(cx),
+        "weather" => weather_home_card(cx),
         _ => notes_card(data, cx),
     }
 }
@@ -1230,4 +1232,89 @@ fn peaclock_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
         );
     }
     out
+}
+
+/// Hava durumu kartı: büyük sıcaklık + ikon + 3 günlük mini tahmin.
+fn weather_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let (loc, w, error) = {
+        let state = cx.global::<crate::weather::WeatherState>();
+        (
+            cx.global::<DashboardData>().weather_location.clone(),
+            state.data.lock().ok().and_then(|d| d.clone()),
+            state.error.lock().ok().and_then(|e| e.clone()),
+        )
+    };
+
+    let Some(w) = w else {
+        return card(cx).gap_2().child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(gpui_kit_assets::IconName::CloudSun)
+                .child(if loc.trim().is_empty() {
+                    "Hava durumu için Ayarlar'dan konum gir".to_string()
+                } else {
+                    format!("{loc} hava durumu yükleniyor…")
+                }),
+        );
+    };
+    let _ = error;
+
+    card(cx)
+        .gap_2()
+        .child(
+            h_flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    h_flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .text_color(cx.theme().accent)
+                                .child(crate::weather::weather_icon(&w.code)),
+                        )
+                        .child(
+                            div()
+                                .text_3xl()
+                                .font_semibold()
+                                .child(format!("{:.0}°", w.temp)),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .truncate()
+                        .child(w.place.clone()),
+                ),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(crate::weather::weather_text(&w.code)),
+        )
+        .when(!w.daily.is_empty(), |c| {
+            c.child(h_flex().gap_2().mt_1().children(w.daily.iter().take(3).map(
+                |(day, min, max, code)| {
+                    v_flex()
+                        .items_center()
+                        .gap_1()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(day.clone())
+                        .child(
+                            div()
+                                .text_color(cx.theme().foreground)
+                                .child(crate::weather::weather_icon(code)),
+                        )
+                        .child(format!("{:.0}/{:.0}°", min, max))
+                },
+            )))
+        })
 }

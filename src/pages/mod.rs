@@ -9,6 +9,7 @@ mod stats;
 mod system;
 
 mod downloads;
+mod weather;
 
 pub use downloads::downloads_page;
 pub use habits::habits_page;
@@ -20,6 +21,7 @@ pub use schedule::schedule_page;
 pub use settings::settings_page;
 pub use stats::stats_page;
 pub use system::system_page;
+pub use weather::weather_page;
 
 use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{h_flex, ActiveTheme};

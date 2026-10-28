@@ -16,6 +16,7 @@ use gpui_kit::{
 use super::card;
 use crate::app::DashboardView;
 use crate::data::DashboardData;
+use crate::weather::PROVIDERS;
 
 pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> AnyElement {
     // grid düzeni: her satır iki kart, gap_4 ile nefes alır;
@@ -24,17 +25,18 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         h_flex()
             .gap_4()
             .items_stretch()
-            .child(a.flex_1())
-            .child(b.flex_1())
+            .child(a.flex_1().min_w_0())
+            .child(b.flex_1().min_w_0())
     };
     v_flex()
         .gap_4()
         .w_full()
-        .max_w(px(720.))
+        .max_w(px(860.))
         .child(card_title(gpui_kit_assets::IconName::Settings2, "Ayarlar"))
         .child(row(profile_card(view, cx), theme_card(cx)))
         .child(row(pomodoro_card(cx), peaclock_card(cx)))
-        .child(row(storage_card(cx), reset_card(view, cx)))
+        .child(row(weather_card(view, cx), storage_card(cx)))
+        .child(reset_card(view, cx))
         .child(visualizer_card(cx))
         .child(backup_card(cx))
         .child(home_layout_card(cx))
@@ -53,7 +55,7 @@ fn card_title(icon: gpui_kit_assets::IconName, label: &'static str) -> Div {
         .child(label)
 }
 
-pub const CARD_LABELS: [(&str, &str); 17] = [
+pub const CARD_LABELS: [(&str, &str); 18] = [
     ("schedule", "Bugünün programı"),
     ("habits", "Alışkanlıklar"),
     ("routines", "Rutinler"),
@@ -71,6 +73,7 @@ pub const CARD_LABELS: [(&str, &str); 17] = [
     ("downloads", "İndirmeler"),
     ("visualizer", "Görselleştirici"),
     ("peaclock", "Büyük saat"),
+    ("weather", "Hava durumu"),
 ];
 
 fn card_label(key: &str) -> &'static str {
@@ -403,6 +406,102 @@ fn backup_card(cx: &mut Context<DashboardView>) -> Div {
                         })),
                 ),
         )
+}
+
+/// Hava durumu ayarları: konum gir, sağlayıcı seç, (gerekirse) API anahtarı.
+/// Değişiklik anında veritabanına kaydedilir ve önbellek tazelenir.
+fn weather_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
+    let (provider, location) = {
+        let data = cx.global::<DashboardData>();
+        (data.weather_provider.clone(), data.weather_location.clone())
+    };
+
+    card(cx)
+        .gap_3()
+        .child(card_title(
+            gpui_kit_assets::IconName::CloudSun,
+            "Hava durumu",
+        ))
+        .child(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(Input::new(&view.weather_loc_input).flex_1())
+                .child(
+                    Button::new("weather-loc-apply")
+                        .small()
+                        .icon(gpui_kit_assets::IconName::Check)
+                        .label("Uygula")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            let loc = this.weather_loc_input.read(cx).value().trim().to_string();
+                            if loc.is_empty() {
+                                return;
+                            }
+                            cx.global_mut::<DashboardData>().set_weather_location(loc);
+                            // yeni konum = önbelleği tazele
+                            if let Ok(mut u) =
+                                cx.global::<crate::weather::WeatherState>().updated.lock()
+                            {
+                                *u = None;
+                            }
+                            cx.notify();
+                        })),
+                ),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(if location.is_empty() {
+                    "Şehir gir (ör. İzmir) — tahmin bunun için çekilir.".to_string()
+                } else {
+                    format!("Konum: {location}")
+                }),
+        )
+        .child(
+            RadioGroup::new("weather-provider")
+                .children([
+                    "Open-Meteo (anahtar gerekmez)",
+                    "OpenWeatherMap (anahtar gerekli)",
+                ])
+                .selected_index(Some(
+                    PROVIDERS.iter().position(|p| p.0 == provider).unwrap_or(0),
+                ))
+                .on_change(cx.listener(move |_, index: &usize, _, cx| {
+                    let id = PROVIDERS[*index].0.to_string();
+                    cx.global_mut::<DashboardData>().set_weather_provider(id);
+                    if let Ok(mut u) = cx.global::<crate::weather::WeatherState>().updated.lock() {
+                        *u = None;
+                    }
+                    cx.notify();
+                })),
+        )
+        .when(provider == "openweathermap", |c| {
+            c.child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(Input::new(&view.weather_key_input).flex_1())
+                    .child(
+                        Button::new("weather-key-apply")
+                            .small()
+                            .icon(gpui_kit_assets::IconName::Check)
+                            .label("Kaydet")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                let key =
+                                    this.weather_key_input.read(cx).value().trim().to_string();
+                                cx.global_mut::<DashboardData>()
+                                    .set_weather_api_key("openweathermap", key);
+                                if let Ok(mut u) =
+                                    cx.global::<crate::weather::WeatherState>().updated.lock()
+                                {
+                                    *u = None;
+                                }
+                                cx.notify();
+                            })),
+                    ),
+            )
+        })
 }
 
 /// İndirme kayıt klasörü: dosya diyalogundan seçilir; boşsa varsayılan uygulanır.
