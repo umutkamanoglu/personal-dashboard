@@ -17,21 +17,28 @@ use crate::app::DashboardView;
 use crate::data::DashboardData;
 
 pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> AnyElement {
+    // grid düzeni: her satır iki kart, gap_4 ile nefes alır;
+    // geniş kartlar (koleksiyon) tüm satırı kaplar
+    let row = |a: Div, b: Div| {
+        h_flex()
+            .gap_4()
+            .items_stretch()
+            .child(a.flex_1())
+            .child(b.flex_1())
+    };
     v_flex()
         .gap_4()
         .w_full()
         .max_w(px(720.))
         .child(div().font_semibold().text_lg().child("Ayarlar"))
-        .child(profile_card(view, cx))
-        .child(theme_card(cx))
-        .child(pomodoro_card(cx))
+        .child(row(profile_card(view, cx), theme_card(cx)))
+        .child(row(pomodoro_card(cx), peaclock_card(cx)))
         .child(visualizer_card(cx))
-        .child(peaclock_card(cx))
         .child(home_layout_card(cx))
         .into_any_element()
 }
 
-pub const CARD_LABELS: [(&str, &str); 16] = [
+pub const CARD_LABELS: [(&str, &str); 17] = [
     ("schedule", "Bugünün programı"),
     ("habits", "Alışkanlıklar"),
     ("routines", "Rutinler"),
@@ -46,6 +53,7 @@ pub const CARD_LABELS: [(&str, &str); 16] = [
     ("general", "Bilgisayar"),
     ("network", "Ağ"),
     ("media", "Medya"),
+    ("downloads", "İndirmeler"),
     ("visualizer", "Görselleştirici"),
     ("peaclock", "Büyük saat"),
 ];

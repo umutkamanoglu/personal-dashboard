@@ -2,7 +2,9 @@ use gpui_kit::base::StyledExt as _;
 use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
-    h_flex, v_flex, ActiveTheme, IconName, Sizable as _,
+    h_flex,
+    slider::Slider,
+    v_flex, ActiveTheme, IconName, Sizable as _,
 };
 use gpui_kit::img;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -15,6 +17,7 @@ use super::{card, progress_bar};
 use crate::app::{DashboardView, Page};
 use crate::audio;
 use crate::data::{self, DashboardData, PomodoroPhase};
+use crate::downloads::{DlStatus, DownloadState};
 use crate::hardware::HardwareInfo;
 use crate::media::{self, MediaCmd, MediaState};
 use chrono::Local;
@@ -253,6 +256,7 @@ fn home_key_page(key: &str) -> Page {
         "routines" => Page::Routines,
         "notes" => Page::Notes,
         "pomodoro" => Page::Pomodoro,
+        "downloads" => Page::Downloads,
         _ => Page::System,
     }
 }
@@ -278,6 +282,7 @@ pub fn card_body(
         "general" => general_home_card(cx),
         "network" => network_home_card(cx),
         "media" => media_home_card(cx),
+        "downloads" => downloads_home_card(cx),
         "visualizer" => visualizer_home_card(cx),
         "peaclock" => peaclock_home_card(cx),
         _ => notes_card(data, cx),
@@ -721,7 +726,7 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
     }
 
     // kapak görseli: SMTC'den gelen baytlar gpui Image'e dönüştürülür
-    let (cover, app, title, artist, album, playing) = {
+    let (cover, app, title, artist, album, playing, vol, slider_el) = {
         let state = cx.global::<MediaState>();
         let cover = state.thumb.as_ref().map(|thumb| {
             let format = if thumb.format == "png" {
@@ -739,6 +744,10 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
                 .rounded_sm()
                 .flex_shrink_0()
         });
+        let slider_el = state
+            .volume_slider
+            .clone()
+            .map(|s| Slider::new(&s).flex_1());
         (
             cover,
             state.app.clone(),
@@ -746,6 +755,8 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
             state.artist.clone(),
             state.album.clone(),
             state.playing,
+            state.volume,
+            slider_el,
         )
     };
 
@@ -871,6 +882,130 @@ fn media_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
             )),
     );
 
+    // ses seviyesi: ana çıkış volume'ü, slider + yüzdesi
+    let muted = cx.global::<MediaState>().muted;
+    let mute_icon = if muted {
+        gpui_kit_assets::IconName::VolumeX
+    } else {
+        gpui_kit_assets::IconName::Volume2
+    };
+    card = card.child(
+        h_flex()
+            .gap_2()
+            .pt_1()
+            .items_center()
+            .child(
+                div()
+                    .id("media-mute")
+                    .cursor_pointer()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(mute_icon)
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        let m = !cx.global::<MediaState>().muted;
+                        cx.background_executor()
+                            .spawn(async move { audio::set_muted(m) })
+                            .detach();
+                    }),
+            )
+            .when_some(slider_el, |row, s| row.child(s))
+            .child(
+                div()
+                    .text_xs()
+                    .w(px(34.))
+                    .text_right()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("{}%", (vol * 100.).round() as u32)),
+            ),
+    );
+
+    card
+}
+
+/// İndirmeler kartı: son işlerin durumu; boşsa kısa ipucu.
+fn downloads_home_card(cx: &mut Context<DashboardView>) -> gpui_kit::Div {
+    let entries = cx.global::<DownloadState>().snapshot();
+    let mut card = card(cx).gap_2().child(
+        h_flex()
+            .justify_between()
+            .items_center()
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(gpui_kit_assets::IconName::Download)
+                    .child(div().font_semibold().text_sm().child("İndirmeler")),
+            )
+            .child({
+                let active = entries
+                    .iter()
+                    .filter(|e| matches!(e.status, DlStatus::Pending | DlStatus::Running))
+                    .count();
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(if active > 0 {
+                        format!("{} iş · {} devam", entries.len(), active)
+                    } else {
+                        format!("{} iş", entries.len())
+                    })
+            }),
+    );
+
+    if entries.is_empty() {
+        card = card.child(
+            div()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child("Son indirme yok — İndirmeler sayfasından başlat"),
+        );
+        return card;
+    }
+
+    for e in entries.into_iter().take(5) {
+        let (dot, text) = match e.status {
+            DlStatus::Pending => (cx.theme().muted_foreground, "Bekliyor".to_string()),
+            DlStatus::Running => (
+                cx.theme().primary,
+                format!("{}%", (e.progress * 100.).round() as u32),
+            ),
+            DlStatus::Done => (cx.theme().success, "Tamam".to_string()),
+            DlStatus::Failed => (cx.theme().danger, e.error.clone().unwrap_or("Hata".into())),
+        };
+        card = card.child(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .py_0p5()
+                .child(
+                    div()
+                        .w(px(7.))
+                        .h(px(7.))
+                        .rounded_full()
+                        .bg(dot)
+                        .flex_shrink_0(),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .text_sm()
+                        .truncate()
+                        .text_color(cx.theme().foreground)
+                        .child(if e.title.is_empty() {
+                            e.url.clone()
+                        } else {
+                            e.title.clone()
+                        }),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_right()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(text),
+                ),
+        );
+    }
     card
 }
 

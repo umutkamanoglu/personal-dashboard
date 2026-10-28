@@ -4,6 +4,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::InputState,
+    slider::{SliderEvent, SliderState},
     v_flex, ActiveTheme, IconName, Sizable as _, TitleBar,
 };
 use gpui_kit::prelude::FluentBuilder as _;
@@ -17,6 +18,7 @@ use crate::audio;
 use crate::data;
 use crate::hardware::HardwareInfo;
 use crate::media;
+use crate::media::MediaState;
 use crate::pages;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +32,7 @@ pub enum Page {
     Pomodoro,
     Settings,
     System,
+    Downloads,
 }
 
 impl Page {
@@ -44,27 +47,32 @@ impl Page {
             Page::Pomodoro => "Pomodoro",
             Page::Settings => "Ayarlar",
             Page::System => "Sistem",
+            Page::Downloads => "İndirmeler",
         }
     }
 
-    fn icon(self) -> IconName {
+    fn icon(self) -> gpui_kit_assets::IconName {
         match self {
-            Page::Home => IconName::LayoutDashboard,
-            Page::Schedule => IconName::Calendar,
-            Page::Habits => IconName::CircleCheck,
-            Page::Routines => IconName::RefreshCw,
-            Page::Stats => IconName::ChartPie,
-            Page::Notes => IconName::FileText,
-            Page::Pomodoro => IconName::Play,
-            Page::Settings => IconName::Settings2,
-            Page::System => IconName::Cpu,
+            Page::Home => gpui_kit_assets::IconName::LayoutDashboard,
+            Page::Schedule => gpui_kit_assets::IconName::Calendar,
+            Page::Habits => gpui_kit_assets::IconName::CircleCheck,
+            Page::Routines => gpui_kit_assets::IconName::RefreshCw,
+            Page::Stats => gpui_kit_assets::IconName::ChartPie,
+            Page::Notes => gpui_kit_assets::IconName::FileText,
+            Page::Pomodoro => gpui_kit_assets::IconName::Play,
+            Page::Settings => gpui_kit_assets::IconName::Settings2,
+            Page::System => gpui_kit_assets::IconName::Cpu,
+            Page::Downloads => gpui_kit_assets::IconName::Download,
         }
     }
 }
 
 /// Menü grupları: (etiket, sayfalar)
 const NAV_GROUPS: [(&str, &[Page]); 3] = [
-    ("Genel", &[Page::Home, Page::System, Page::Settings]),
+    (
+        "Genel",
+        &[Page::Home, Page::System, Page::Downloads, Page::Settings],
+    ),
     ("Takip", &[Page::Habits, Page::Routines, Page::Stats]),
     ("Zaman", &[Page::Schedule, Page::Notes, Page::Pomodoro]),
 ];
@@ -89,6 +97,9 @@ pub struct DashboardView {
     pub(crate) pomo_label_input: Entity<InputState>,
     // Ayarlar formu
     pub(crate) name_input: Entity<InputState>,
+    // İndirme sayfası: URL girişi + ses/vidyo tercihi
+    pub(crate) download_url_input: Entity<InputState>,
+    pub(crate) down_audio: bool,
     // Saatler timeline zoom (0.5..4)
     pub(crate) tl_zoom: f32,
     // Sol menü: grup açık mı (NAV_GROUPS sırasıyla)
@@ -119,6 +130,29 @@ impl DashboardView {
         let routine_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Yeni rutin ekle..."));
 
+        let volume_slider = cx.new(|cx| {
+            let start = audio::master_volume().map(|v| v.0).unwrap_or(0.5);
+            let mut st = SliderState::new().min(0.).max(1.).step(0.05);
+            st.set_value(start, window, cx);
+            st
+        });
+        cx.global_mut::<MediaState>().volume_slider = Some(volume_slider.clone());
+        // slider değeri değiştikçe ana sesi ayarla
+        let slider_entity = volume_slider.clone();
+        cx.subscribe(&slider_entity, move |_view, _slider, event, cx| {
+            let v = match *event {
+                SliderEvent::Change(v) | SliderEvent::Release(v) => v.end(),
+            };
+            let volume = v.clamp(0., 1.);
+            cx.global_mut::<MediaState>().volume = volume;
+            cx.background_executor()
+                .spawn(async move { audio::set_master_volume(volume) })
+                .detach();
+        })
+        .detach();
+        let download_url_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("YouTube / Instagram / Vimeo…"));
+
         // saniyelik tick: saat + pomodoro + donanım güncellensin
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
@@ -135,7 +169,10 @@ impl DashboardView {
                     cx.global_mut::<data::DashboardData>().advance_pomodoro();
                     // donanım: CPU/RAM her saniye, sıcaklıklar seyrek (hardware içinden)
                     cx.global_mut::<HardwareInfo>().refresh_light();
+                    // slider state'i global'de kalıcı; yoklama sonucu onu sıfırlamasın
+                    let keep_slider = cx.global::<media::MediaState>().volume_slider.clone();
                     *cx.global_mut::<media::MediaState>() = media_state;
+                    cx.global_mut::<media::MediaState>().volume_slider = keep_slider;
                     cx.notify()
                 });
             } else {
@@ -196,6 +233,8 @@ impl DashboardView {
             remind_days: [false; 7],
             pomo_label_input,
             name_input,
+            download_url_input,
+            down_audio: false,
             tl_zoom: 1.0,
             open_groups: [true; 3],
             sidebar_collapsed: false,
@@ -460,6 +499,7 @@ impl gpui_kit::Render for DashboardView {
             Page::Pomodoro => pages::pomodoro_page(self, cx),
             Page::Settings => pages::settings_page(self, cx),
             Page::System => pages::system_page(self, cx),
+            Page::Downloads => pages::downloads_page(self, cx),
         };
 
         v_flex()

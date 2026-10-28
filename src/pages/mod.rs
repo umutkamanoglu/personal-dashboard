@@ -8,6 +8,9 @@ mod settings;
 mod stats;
 mod system;
 
+mod downloads;
+
+pub use downloads::downloads_page;
 pub use habits::habits_page;
 pub use home::{card_body, home_page};
 pub use notes::notes_page;

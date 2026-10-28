@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod data;
+mod downloads;
 mod hardware;
 mod media;
 mod pages;
@@ -18,6 +19,7 @@ fn main() {
             cx.set_global(data);
             cx.set_global(hardware::HardwareInfo::new());
             cx.set_global(media::MediaState::default());
+            cx.set_global(downloads::start());
             // ses görselleştirici: arka plan yakalama iş parçacığını başlat
             cx.set_global(audio::start());
 

@@ -6,6 +6,9 @@
 
 use std::sync::Arc;
 
+use gpui_kit::component::slider::SliderState;
+use gpui_kit::Entity;
+
 use windows::core::Result;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
@@ -29,6 +32,12 @@ pub struct MediaState {
     pub thumb: Option<Arc<ThumbImage>>,
     /// örnekleme hatası varsa (kartta göstermek için)
     pub error: Option<String>,
+    /// ana ses seviyesi (0..=1), yoklanırken güncellenir
+    pub volume: f32,
+    /// ses kapalı mı
+    pub muted: bool,
+    /// medya kartındaki ses slider state'i (açılışta kurulur)
+    pub volume_slider: Option<Entity<SliderState>>,
 }
 
 /// Kapak resmi baytları (ID, format, veri).
@@ -96,6 +105,9 @@ pub fn poll() -> MediaState {
     };
 
     let run = || -> Result<MediaState> {
+        // ses seviyesi: WASAPI endpoint (Win32) — WinRT denemesinden bağımsız
+        let (volume, muted) = crate::audio::master_volume().unwrap_or((0., false));
+
         let mgr = session_manager()?;
         let session: GlobalSystemMediaTransportControlsSession = mgr.GetCurrentSession()?;
 
@@ -143,6 +155,9 @@ pub fn poll() -> MediaState {
             album: hstr(props.AlbumTitle()),
             thumb,
             error: None,
+            volume,
+            muted,
+            ..Default::default()
         })
     };
 
@@ -154,6 +169,11 @@ pub fn poll() -> MediaState {
             } else {
                 Some(e.to_string())
             };
+            // medya yoksa bile ses seviyesi bilgisi güncel kalsın
+            if let Some((v, m)) = crate::audio::master_volume() {
+                state.volume = v;
+                state.muted = m;
+            }
             state
         }
     }

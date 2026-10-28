@@ -261,7 +261,7 @@ pub struct DashboardData {
 }
 
 /// Kart koleksiyonu anahtarları (anasayfaya eklenebilir kartlar).
-pub const HOME_CARD_KEYS: [&str; 16] = [
+pub const HOME_CARD_KEYS: [&str; 17] = [
     "schedule",
     "habits",
     "routines",
@@ -276,6 +276,7 @@ pub const HOME_CARD_KEYS: [&str; 16] = [
     "general",
     "network",
     "media",
+    "downloads",
     "visualizer",
     "peaclock",
 ];

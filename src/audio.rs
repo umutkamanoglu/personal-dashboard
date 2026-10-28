@@ -310,3 +310,54 @@ fn decay(bands: &mut [f32], factor: f32) {
         *b *= factor;
     }
 }
+
+// --- Ses seviyesi (master volume, IAudioEndpointVolume) ---
+
+unsafe fn audio_endpoint() -> Option<windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume>
+{
+    use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+
+    // kural: çift başlatma S_FALSE döner; MT ctrl'de apartman uyuşmazlığında
+    // RPC_E_CHANGED_MODE dönebilir ama COM zaten başlatılmıştır, devam ederiz.
+    let clsid = windows::core::GUID::from_u128(0xbcde_0395_e52f_467c_8e3d_c457_9291_692e);
+    let res = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+    if res.is_err() {
+        // ok sorun değil
+    }
+    let enumerator: IMMDeviceEnumerator = CoCreateInstance(&clsid, None, CLSCTX_ALL).ok()?;
+    let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
+    device.Activate(CLSCTX_ALL, None).ok()
+}
+
+/// Ana ses seviyesi (0..=1) ve mute durumu.
+pub fn master_volume() -> Option<(f32, bool)> {
+    unsafe {
+        let endpoint = audio_endpoint()?;
+        let vol = endpoint.GetMasterVolumeLevelScalar().ok()?;
+        let muted = endpoint.GetMute().ok()?;
+        Some((vol, muted.as_bool()))
+    }
+}
+
+/// Ana ses seviyesini ayarlar.
+pub fn set_master_volume(v: f32) {
+    unsafe {
+        if let Some(endpoint) = audio_endpoint() {
+            let reff = windows::core::GUID::default();
+            let _ = endpoint.SetMasterVolumeLevelScalar(v.clamp(0.0, 1.0), &reff);
+        }
+    }
+}
+
+/// Ses aç/kapa.
+pub fn set_muted(m: bool) {
+    unsafe {
+        if let Some(endpoint) = audio_endpoint() {
+            let reff = windows::core::GUID::default();
+            let _ = endpoint.SetMute(m, &reff);
+        }
+    }
+}
