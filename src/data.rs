@@ -193,7 +193,9 @@ impl ScheduleEntry {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DashboardData {
+    #[serde(default)]
     pub habits: Vec<Habit>,
+    #[serde(default)]
     pub routine_items: Vec<RoutineItem>,
     /// kullanıcı adı (selamlamada kullanılır)
     #[serde(default = "default_name")]
@@ -957,6 +959,18 @@ mod tests {
         data.add_habit("Test".into(), frequency);
         let id = data.habits[0].id.clone();
         (data, id)
+    }
+
+    #[test]
+    fn empty_json_parses_into_defaults() {
+        // reset() dosyayı sildikten sonra load() fallback olarak "{}" parse eder;
+        // her alan serde default'una sahip olmalı, yoksa panic olur.
+        let data: DashboardData = serde_json::from_str("{}").unwrap();
+        assert!(data.habits.is_empty());
+        assert_eq!(data.name, "Umut");
+        assert_eq!(data.work_min, 25);
+        assert_eq!(data.viz_bars, 28);
+        assert_eq!(data.home_order.len(), 6);
     }
 
     #[test]
