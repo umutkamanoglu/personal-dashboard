@@ -13,7 +13,7 @@ fn main() {
     let data = data::DashboardData::load();
 
     gpui_kit::application()
-        .with_assets(gpui_kit::assets::Assets)
+        .with_assets(gpui_kit_assets::AllAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
             cx.set_global(data);

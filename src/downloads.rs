@@ -271,8 +271,8 @@ async fn drain_jobs_to_error(
 #[allow(clippy::too_many_arguments)]
 async fn run_job(
     downloader: &Downloader,
-    out_dir: &PathBuf,
-    libs_dir: &PathBuf,
+    out_dir: &Path,
+    libs_dir: &Path,
     id: u64,
     url: &str,
     audio_only: bool,
@@ -378,7 +378,7 @@ async fn run_job(
 /// bakıp reqwest'e 403 döndürür; CLI ikilisi curl_cffi impersonation ile başarılı.
 /// Terminale dokunmaz: ikili dosyanın kendisini süreç olarak çalıştırır.
 async fn cli_fallback(
-    libs_dir: &PathBuf,
+    libs_dir: &Path,
     url: &str,
     stem: &str,
     audio_only: bool,

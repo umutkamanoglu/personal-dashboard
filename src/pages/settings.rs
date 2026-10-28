@@ -30,12 +30,25 @@ pub fn settings_page(view: &DashboardView, cx: &mut Context<DashboardView>) -> A
         .gap_4()
         .w_full()
         .max_w(px(720.))
-        .child(div().font_semibold().text_lg().child("Ayarlar"))
+        .child(card_title(gpui_kit_assets::IconName::Settings2, "Ayarlar"))
         .child(row(profile_card(view, cx), theme_card(cx)))
         .child(row(pomodoro_card(cx), peaclock_card(cx)))
         .child(visualizer_card(cx))
+        .child(backup_card(cx))
         .child(home_layout_card(cx))
         .into_any_element()
+}
+
+/// Kart başlığı: aranan ayarı bulmayı kolaylaştıran küçük bir ikonla.
+fn card_title(icon: gpui_kit_assets::IconName, label: &'static str) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .font_semibold()
+        .text_lg()
+        .child(icon)
+        .child(label)
 }
 
 pub const CARD_LABELS: [(&str, &str); 17] = [
@@ -71,9 +84,10 @@ fn card_label(key: &str) -> &'static str {
 /// kart ekle/çıkar, sıralama ve genişlik (1 = yarım sütun, 2 = tam sütun).
 fn home_layout_card(cx: &mut Context<DashboardView>) -> Div {
     let data = cx.global::<DashboardData>().clone();
-    let mut card = card(cx)
-        .gap_3()
-        .child(div().text_sm().font_medium().child("Anasayfa kartları"));
+    let mut card = card(cx).gap_3().child(card_title(
+        gpui_kit_assets::IconName::LayoutGrid,
+        "Anasayfa kartları",
+    ));
 
     // sıradaki kartlar: genişlik + sıra + çıkar
     card = card.children(data.home_order.iter().map(|key| {
@@ -217,7 +231,10 @@ fn profile_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
     let data = cx.global::<DashboardData>().clone();
     card(cx)
         .gap_3()
-        .child(div().text_sm().font_medium().child("Profil"))
+        .child(card_title(
+            gpui_kit_assets::IconName::SquareUserRound,
+            "Profil",
+        ))
         .child(
             h_flex()
                 .gap_2()
@@ -254,23 +271,40 @@ fn profile_card(view: &DashboardView, cx: &mut Context<DashboardView>) -> Div {
 }
 
 fn theme_card(cx: &mut Context<DashboardView>) -> Div {
-    let dark = cx.global::<DashboardData>().dark_mode;
+    let data = cx.global::<DashboardData>();
+    let dark = data.dark_mode;
+    let system = data.theme_system;
     card(cx)
         .gap_3()
-        .child(div().text_sm().font_medium().child("Tema"))
+        .child(card_title(gpui_kit_assets::IconName::SunMoon, "Tema"))
         .child(
             RadioGroup::new("theme-mode")
-                .children(["Açık", "Koyu"])
-                .selected_index(Some(if dark { 1 } else { 0 }))
+                .children(["Açık", "Koyu", "Sistem"])
+                .selected_index(Some(if system { 2 } else if dark { 1 } else { 0 }))
                 .on_change(cx.listener(|_, index, window, cx| {
-                    let dark = *index == 1;
-                    cx.global_mut::<DashboardData>().set_dark_mode(dark);
-                    let mode = if dark {
-                        gpui_kit::component::ThemeMode::Dark
-                    } else {
-                        gpui_kit::component::ThemeMode::Light
-                    };
-                    gpui_kit::component::Theme::change(mode, Some(window), cx);
+                    match *index {
+                        // Windows'un açık/koyu tercihi izlenir
+                        2 => {
+                            cx.global_mut::<DashboardData>().set_theme_system();
+                            let dark = cx.global::<DashboardData>().dark_mode;
+                            let mode = if dark {
+                                gpui_kit::component::ThemeMode::Dark
+                            } else {
+                                gpui_kit::component::ThemeMode::Light
+                            };
+                            gpui_kit::component::Theme::change(mode, Some(window), cx);
+                        }
+                        _ => {
+                            let dark = *index == 1;
+                            cx.global_mut::<DashboardData>().set_dark_mode(dark);
+                            let mode = if dark {
+                                gpui_kit::component::ThemeMode::Dark
+                            } else {
+                                gpui_kit::component::ThemeMode::Light
+                            };
+                            gpui_kit::component::Theme::change(mode, Some(window), cx);
+                        }
+                    }
                     cx.notify();
                 })),
         )
@@ -278,7 +312,94 @@ fn theme_card(cx: &mut Context<DashboardView>) -> Div {
             div()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child("Tercih uygulama yeniden açıldığında korunur."),
+                .child("Tercih uygulama yeniden açıldığında korunur. “Sistem” seçeneği Windows'un açık/koyu ayarını izler."),
+        )
+}
+
+/// Tüm verinin JSON yedeğini dışa aktar / içe aktar.
+/// Dosya diyalogları bloklayıcı olduğundan arka filanda çalışır;
+/// veri kopyası diyalog açılmadan önce alınır.
+fn backup_card(cx: &mut Context<DashboardView>) -> Div {
+    card(cx)
+        .gap_3()
+        .child(card_title(gpui_kit_assets::IconName::Database, "Yedekleme"))
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child(
+                    "Tüm veri (profil, alışkanlıklar, rutinler, notlar, ayarlar) tek JSON dosyasına yazılır; içe aktarım mevcut verinin yerine geçer.",
+                ),
+        )
+        .child(
+            h_flex()
+                .gap_2()
+                .child(
+                    Button::new("backup-export")
+                        .small()
+                        .icon(gpui_kit_assets::IconName::Download)
+                        .label("Dışa aktar…")
+                        .on_click(cx.listener(|_, _, _, cx| {
+                            let snapshot = cx.global::<DashboardData>().clone();
+                            cx.spawn(async move |_, cx| {
+                                let saved = cx
+                                    .background_executor()
+                                    .spawn(async move {
+                                        rfd::FileDialog::new()
+                                            .set_title("Yedeği dışa aktar")
+                                            .set_file_name("personal-dashboard-yedek.json")
+                                            .add_filter("JSON", &["json"])
+                                            .save_file()
+                                            .map(|p| snapshot.export_to(&p))
+                                    })
+                                    .await;
+                                if let Some(Ok(_path)) = saved {
+                                    // dışa aktarım sessizde tamam; dosya yolu diyalogda görülür
+                                }
+                            })
+                            .detach();
+                        })),
+                )
+                .child(
+                    Button::new("backup-import")
+                        .small()
+                        .icon(gpui_kit_assets::IconName::Upload)
+                        .label("İçe aktar…")
+                        .on_click(cx.listener(|_, _, _, cx| {
+                            cx.spawn(async move |this, cx| {
+                                let loaded = cx
+                                    .background_executor()
+                                    .spawn(async move {
+                                        rfd::FileDialog::new()
+                                            .set_title("Yedeği içe aktar")
+                                            .add_filter("JSON", &["json"])
+                                            .pick_file()
+                                            .map(|p| DashboardData::import_from(&p))
+                                    })
+                                    .await;
+                                if let Some(result) = loaded {
+                                    this.update(cx, |_, cx| match result {
+                                        Ok(data) => {
+                                            let dark = data.dark_mode;
+                                            cx.set_global(data);
+                                            let mode = if dark {
+                                                gpui_kit::component::ThemeMode::Dark
+                                            } else {
+                                                gpui_kit::component::ThemeMode::Light
+                                            };
+                                            gpui_kit::component::Theme::change(mode, None, cx);
+                                            cx.notify();
+                                        }
+                                        Err(_) => {
+                                            // bozuk/uyumsuz yedek: sessizce yoksay
+                                        }
+                                    })
+                                    .ok();
+                                }
+                            })
+                            .detach();
+                        })),
+                ),
         )
 }
 
@@ -296,12 +417,10 @@ fn pomodoro_card(cx: &mut Context<DashboardView>) -> Div {
 
     card(cx)
         .gap_3()
-        .child(
-            div()
-                .text_sm()
-                .font_medium()
-                .child("Pomodoro varsayılanları"),
-        )
+        .child(card_title(
+            gpui_kit_assets::IconName::Timer,
+            "Pomodoro varsayılanları",
+        ))
         .child(
             h_flex()
                 .gap_6()
@@ -380,12 +499,10 @@ fn visualizer_card(cx: &mut Context<DashboardView>) -> Div {
 
     card(cx)
         .gap_3()
-        .child(
-            div()
-                .text_sm()
-                .font_medium()
-                .child("Görselleştirici görünümü"),
-        )
+        .child(card_title(
+            gpui_kit_assets::IconName::AudioLines,
+            "Görselleştirici görünümü",
+        ))
         .child(
             h_flex()
                 .gap_6()
@@ -475,7 +592,10 @@ fn peaclock_card(cx: &mut Context<DashboardView>) -> Div {
 
     card(cx)
         .gap_3()
-        .child(div().text_sm().font_medium().child("Büyük saat görünümü"))
+        .child(card_title(
+            gpui_kit_assets::IconName::Clock,
+            "Büyük saat görünümü",
+        ))
         .child(
             h_flex()
                 .gap_6()

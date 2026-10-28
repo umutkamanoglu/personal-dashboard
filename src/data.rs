@@ -222,6 +222,9 @@ pub struct DashboardData {
     /// koyu tema mı (kaydedilir, açık tema varsayılan)
     #[serde(default)]
     pub dark_mode: bool,
+    /// tema Windows/uygulama tercihini izlesin mi ("Sistem" seçeneği)
+    #[serde(default)]
+    pub theme_system: bool,
     /// aktif pomodoro seansı (yoksa None)
     #[serde(default)]
     pub pomodoro: Option<Pomodoro>,
@@ -393,6 +396,10 @@ impl DashboardData {
             .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
             .unwrap_or_else(|| serde_json::from_slice(b"{}").unwrap());
         data.sanitize();
+        // "Sistem" teması: Windows'un güncel açık/koyu tercihi her açılışta taze okunur
+        if data.theme_system {
+            data.dark_mode = system_prefers_dark();
+        }
         data.save();
         data
     }
@@ -457,7 +464,33 @@ impl DashboardData {
     /// Tema tercihi kaydı.
     pub fn set_dark_mode(&mut self, dark: bool) {
         self.dark_mode = dark;
+        self.theme_system = false;
         self.save();
+    }
+
+    /// "Sistem" seçeneği: koyu/kensity'yi işletim sistemine bırak.
+    pub fn set_theme_system(&mut self) {
+        self.theme_system = true;
+        self.dark_mode = system_prefers_dark();
+        self.save();
+    }
+
+    // --- Yedekleme (dışa aktar / içe aktar) ---
+
+    /// Tüm veriyi (ayarlar + takipler) seçilen JSON dosyasına yazar.
+    pub fn export_to(&self, path: &PathBuf) -> Result<String, String> {
+        let json = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        fs::write(path, &json).map_err(|e| e.to_string())?;
+        Ok(path.display().to_string())
+    }
+
+    /// Seçilen JSON yedeğini yükler ve global veriyi birebir değiştirir.
+    pub fn import_from(path: &PathBuf) -> Result<Self, String> {
+        let bytes = fs::read(path).map_err(|e| e.to_string())?;
+        let mut data: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        data.sanitize();
+        data.save();
+        Ok(data)
     }
 
     // --- Görselleştirici ---
@@ -864,6 +897,36 @@ impl gpui_kit::Global for DashboardData {}
 
 fn habit_done_impl(set: &BTreeSet<String>, frequency: Frequency, date: NaiveDate) -> bool {
     set.contains(&period_key(date, frequency))
+}
+
+/// Windows'un açık/koyu tercihini okur (AppsUseLightTheme: 1 = açık).
+/// Değer okunamazsa açık tema varsayar.
+#[cfg(windows)]
+fn system_prefers_dark() -> bool {
+    use windows::core::w;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+
+    let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+    let mut value: u32 = 1;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    let ok = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey,
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut value as *mut u32 as *mut _),
+            Some(&mut size),
+        )
+        .is_ok()
+    };
+    ok && value == 0
+}
+
+#[cfg(not(windows))]
+fn system_prefers_dark() -> bool {
+    false
 }
 
 #[cfg(test)]
